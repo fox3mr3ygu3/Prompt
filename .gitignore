@@ -47,5 +47,8 @@ tempo-data/
 loki-data/
 prometheus-data/
 
+# Build artifacts
+*.tar.gz
+
 # OS
 *.log

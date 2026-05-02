@@ -1,0 +1,94 @@
+[project]
+name = "quick-conf-backend"
+version = "0.0.0"
+description = "FastAPI backend for quick-conf.app"
+# Targets Python 3.14 (matches the local dev box and the container image).
+# >=3.12 is set so contributors on slightly older interpreters can still run
+# the code, but CI and Docker pin 3.14.
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "pydantic[email]>=2.7",
+  "pydantic-settings>=2.3",
+  "sqlalchemy>=2.0",
+  "psycopg[binary]>=3.2",
+  "alembic>=1.13",
+  "redis>=5.0",
+  "meilisearch>=0.31",
+  "python-jose[cryptography]>=3.3",
+  "passlib[bcrypt]>=1.7",
+  # passlib 1.7.4 is incompatible with bcrypt 4.1+ (probe raises ValueError on
+  # >72-byte passwords instead of silently truncating). Pin to the last
+  # passlib-compatible release until passlib ships a fix.
+  "bcrypt<4.1",
+  "httpx>=0.27",
+  "python-multipart>=0.0.9",
+  "websockets>=12.0",
+  "structlog>=24.1",
+  "qrcode[pil]>=7.4",
+  "apscheduler>=3.10",
+  "opentelemetry-api>=1.27",
+  "opentelemetry-sdk>=1.27",
+  "opentelemetry-exporter-otlp>=1.27",
+  "opentelemetry-instrumentation-fastapi>=0.48b0",
+  "opentelemetry-instrumentation-sqlalchemy>=0.48b0",
+  "opentelemetry-instrumentation-redis>=0.48b0",
+  "opentelemetry-instrumentation-logging>=0.48b0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "pytest-asyncio>=0.23",
+  "pytest-cov>=5.0",
+  "ruff>=0.5",
+  "black>=24.4",
+  "mypy>=1.10",
+  "types-passlib",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*"]
+
+# ── Ruff ──────────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C4", "ASYNC", "PL"]
+ignore = ["PLR0913"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["PLR2004"]
+
+# ── Black ─────────────────────────────────────────────────────────────────────
+[tool.black]
+line-length = 100
+target-version = ["py313"]
+
+# ── Mypy ──────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = []
+warn_unused_ignores = true
+warn_return_any = true
+disallow_untyped_decorators = false
+exclude = ["app/db/migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["meilisearch.*", "qrcode.*", "passlib.*", "jose.*", "apscheduler.*"]
+ignore_missing_imports = true
+
+# ── Pytest ────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"

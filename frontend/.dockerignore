@@ -1,0 +1,5 @@
+node_modules
+dist
+.vite
+.eslintcache
+.DS_Store

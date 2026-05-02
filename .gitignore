@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+.coverage.*
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+# Stale tsc emit alongside .tsx/.ts sources (tsc is in noEmit mode; Vite
+# bundles directly, so these would only be re-generated if someone ran
+# `tsc` without --noEmit). Track the .ts/.tsx files only.
+frontend/src/**/*.js
+frontend/src/**/*.js.map
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Claude Code local state (per-machine settings, scheduled tasks, memory)
+.claude/
+
+# Docker volumes / runtime
+.data/
+postgres-data/
+redis-data/
+meili-data/
+grafana-data/
+tempo-data/
+loki-data/
+prometheus-data/
+
+# OS
+*.log

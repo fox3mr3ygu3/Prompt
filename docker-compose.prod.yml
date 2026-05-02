@@ -1,0 +1,199 @@
+# quick-conf.app — production stack for the DigitalOcean droplet.
+#
+# Used standalone (not as an overlay):
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Differences from docker-compose.yml (dev):
+#   - No public host ports on postgres/redis/meili/grafana/prometheus.
+#     Only nginx (:80, :443) is reachable from the internet.
+#   - APP_ENV=prod, APP_DEBUG=false.
+#   - Restart policy is `always` so containers come back after a reboot.
+#   - frontend-dist is seeded from the build container into a shared volume
+#     mounted read-only by nginx (same pattern as dev).
+#
+# TLS is *not* configured here — once DNS for quick-conf.app resolves to the
+# droplet, run `infra/nginx/init-letsencrypt.sh` (TODO follow-up) to enable
+# certbot + 443. Until then the site serves on plain :80.
+
+name: quick-conf
+
+x-backend-base: &backend-base
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  restart: always
+  env_file: .env
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    meili:
+      condition: service_healthy
+  healthcheck:
+    test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz').status==200 else 1)"]
+    interval: 10s
+    timeout: 3s
+    retries: 15
+    start_period: 30s
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app} -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 120s
+    # No public port — backend reaches it via the compose network.
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  meili:
+    image: getmeili/meilisearch:v1.10
+    restart: always
+    environment:
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:?MEILI_MASTER_KEY must be set in .env}
+      MEILI_ENV: production
+    volumes:
+      - meili-data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:7700/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
+  backend1:
+    <<: *backend-base
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+
+  backend2:
+    <<: *backend-base
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=*"]
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: always
+    volumes:
+      - frontend-dist:/www
+
+  nginx:
+    image: openresty/openresty:alpine-fat
+    restart: always
+    depends_on:
+      - backend1
+      - backend2
+      - frontend
+    environment:
+      RATE_LIMIT_RPS: ${RATE_LIMIT_RPS:-20}
+      RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-40}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    volumes:
+      - ./infra/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./infra/nginx/lua:/etc/nginx/lua:ro
+      - frontend-dist:/var/www/html:ro
+    ports:
+      - "80:80"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  cron:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["python", "-m", "ops.cron.schedule"]
+    volumes:
+      - ./ops:/app/ops:ro
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.107.0
+    restart: always
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./infra/otel/config.yaml:/etc/otelcol/config.yaml:ro
+    depends_on:
+      - tempo
+      - loki
+      - prometheus
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    restart: always
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom-data:/prometheus
+
+  tempo:
+    image: grafana/tempo:2.5.0
+    restart: always
+    command: ["-config.file=/etc/tempo/tempo.yaml"]
+    volumes:
+      - ./infra/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+
+  loki:
+    image: grafana/loki:3.1.0
+    restart: always
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ./infra/loki/loki.yaml:/etc/loki/loki.yaml:ro
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?GRAFANA_ADMIN_PASSWORD must be set in .env}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://quick-conf.app/grafana}
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - tempo
+      - loki
+
+volumes:
+  postgres-data:
+  redis-data:
+  meili-data:
+  frontend-dist:
+  prom-data:
+  tempo-data:
+  grafana-data:

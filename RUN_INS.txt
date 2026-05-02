@@ -1,0 +1,87 @@
+ Step 0 — One-time check                                                                  
+ Make sure Docker Desktop is running (green whale icon in system tray). Then verify:
+
+  docker version
+  docker compose version
+
+  If docker version errors, Docker isn't ready yet — wait 30 seconds.
+
+  Step 1 — Boot the whole stack (one command)
+
+  docker compose up -d --build
+
+  What happens:
+  - Pulls ~10 base images (Postgres, Redis, Meilisearch, OpenResty, Grafana, Tempo, Loki,
+  Prometheus, OTel collector, Node).
+  - Builds your backend image (×2 replicas: backend1, backend2).
+  - Builds your frontend image (Vite production bundle).
+  - Starts 13 containers wired together.
+
+  First run takes 3–5 minutes. Watch progress:
+
+  docker compose ps
+
+  Wait until every service shows healthy or running.
+
+  Step 2 — Migrate DB + load demo data
+
+  docker compose exec backend1 alembic upgrade head
+  docker compose exec backend1 python -m app.seed
+
+  This creates the schema (5 migrations) and inserts 4 demo users, 1 organization, 2
+  events, and 100 seats.
+
+  Step 3 — Smoke-check it's alive
+
+  curl http://localhost/healthz
+  curl http://localhost/api/events
+
+  You should see {"status":"ok"} and a JSON array of 2 events.
+
+  Step 4 — Open in browser (this is your demo)
+
+  ┌───────────────────────┬─────────────────────────────────────────────────┐
+  │          URL          │                  What to show                   │
+  ├───────────────────────┼─────────────────────────────────────────────────┤
+  │ http://localhost      │ The SPA — landing page, browse events           │
+  ├───────────────────────┼─────────────────────────────────────────────────┤
+  │ http://localhost/docs │ Swagger UI — every API endpoint, interactive    │
+  ├───────────────────────┼─────────────────────────────────────────────────┤
+  │ http://localhost:3001 │ Grafana — hold → pay → confirm traces dashboard │
+  ├───────────────────────┼─────────────────────────────────────────────────┤
+  │ http://localhost:7700 │ Meilisearch admin (search engine)               │
+  └───────────────────────┴─────────────────────────────────────────────────┘
+
+  Step 5 — Demo accounts (created by seed)
+
+  ┌──────────────────────────┬──────────┬───────────┬───────────────────────────────────┐
+  │          Email           │ Password │   Role    │         What they can do          │
+  ├──────────────────────────┼──────────┼───────────┼───────────────────────────────────┤
+  │ attendee@quick-conf.app  │ demo1234 │ attendee  │ Browse, hold seat, pay, view      │
+  │                          │          │           │ tickets                           │
+  ├──────────────────────────┼──────────┼───────────┼───────────────────────────────────┤
+  │ organizer@quick-conf.app │ demo1234 │ organizer │ Create events, view dashboard     │
+  ├──────────────────────────┼──────────┼───────────┼───────────────────────────────────┤
+  │ gate@quick-conf.app      │ demo1234 │ gate      │ Scan QR codes                     │
+  ├──────────────────────────┼──────────┼───────────┼───────────────────────────────────┤
+  │ admin@quick-conf.app     │ demo1234 │ admin     │ Refunds, all-org view             │
+  └──────────────────────────┴──────────┴───────────┴───────────────────────────────────┘
+
+
+
+  Useful Make shortcuts during the demo
+
+  make ps          # show container status
+  make logs        # tail all logs
+  make db-shell    # psql into Postgres
+  make redis-shell # redis-cli into Redis
+  make down        # stop everything (keeps data)
+
+  If something goes wrong
+
+  docker compose logs backend1 --tail=50    # check backend errors
+  docker compose restart backend1 backend2  # nudge the API
+  make reset-db                              # nuke DB and re-seed (destructive)
+
+  That's it. Run steps 1 → 2 → 3 once before the presentation to pre-pull images and warm
+  the cache; on demo day step 1 will only take ~30 seconds because everything is cached.

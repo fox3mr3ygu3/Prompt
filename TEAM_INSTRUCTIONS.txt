@@ -1,0 +1,404 @@
+================================================================================
+quick-conf.app — TEAM INSTRUCTIONS
+Read this first. It tells you (1) what the project is, (2) which files YOU own,
+(3) what to push/not push to git, and (4) how to clone + run the stack on a
+fresh PC.
+================================================================================
+
+
+--------------------------------------------------------------------------------
+0. PROJECT IN ONE PARAGRAPH
+--------------------------------------------------------------------------------
+quick-conf.app is a web platform for selling tickets to conferences. Attendees
+browse events, hold a seat for up to 5 minutes, pay (mock provider), and get a
+QR-coded e-ticket that gate operators scan exactly once. Organisers submit new
+events via the "Add event" form on /org/events; submissions land in
+event_proposals (status=pending) and only become visible to attendees after an
+admin approves them on /admin (rejection requires a reason that's shown back
+to the organiser). The system is built to satisfy coursework requirements
+R3-R13. Stack: FastAPI + PostgreSQL + Redis + Meilisearch + WebSockets on the
+backend, React + Vite SPA on the frontend, Nginx + OpenResty (with Lua
+token-bucket rate limiter) at the edge, OTel + Grafana/Tempo/Loki/Prometheus
+for observability, all wired together by a single docker-compose.yml.
+
+
+--------------------------------------------------------------------------------
+1. PROJECT STRUCTURE (high level)
+--------------------------------------------------------------------------------
+.
+|-- backend/             FastAPI service (Python 3.14)
+|   |-- app/
+|   |   |-- api/         HTTP routers (events, holds, orders, scans, ws, ...)
+|   |   |-- core/        config, JWT auth, RBAC deps, OTel init
+|   |   |-- db/          SQLAlchemy models, Alembic migrations
+|   |   |-- services/    booking, holds, qr, redis, cache, search
+|   |   `-- ws/          in-process WebSocket hub
+|   |-- alembic.ini
+|   |-- pyproject.toml   Python deps + ruff/mypy config
+|   `-- tests/           pytest smoke tests
+|
+|-- frontend/            React + Vite SPA (TypeScript strict)
+|   |-- src/pages/       Browse, EventDetail, Seats, Payment, MyTickets, ...
+|   |-- src/components/  Nav and shared UI
+|   |-- src/lib/         axios client, auth context
+|   |-- vite.config.ts   /api /ws /docs proxy in dev
+|   `-- package.json
+|
+|-- infra/               Edge + observability configs
+|   |-- nginx/           nginx.conf + lua/token_bucket.lua  (R8, R11)
+|   |-- otel/            OTLP collector config              (R12)
+|   |-- prometheus/      scrape config                      (R12)
+|   |-- tempo/           trace storage                      (R12)
+|   |-- loki/            log storage                        (R12)
+|   `-- grafana/         provisioned dashboards + datasources
+|
+|-- ops/cron/            APScheduler entrypoint + 3 batch jobs (R10)
+|                        payouts.py, rollup.py, sweeper.py
+|
+|-- docker-compose.yml   13-container stack (the single source of truth)
+|-- Makefile             up / down / migrate / seed / lint / test
+|-- .env / .env.example  full env reference (.env is gitignored)
+|-- README.md            public-facing entry point
+`-- TEAM_INSTRUCTIONS.txt this file
+
+
+--------------------------------------------------------------------------------
+2. WHO OWNS WHAT
+--------------------------------------------------------------------------------
+Each dev has a primary set of files they own end-to-end. Touching another dev's
+files is fine but ping them first. In the presentation, each dev demos the
+files in their section.
+
+================================================================================
+DEV A -- LEAD / INFRA & INTEGRATION
+================================================================================
+Owns: repo plumbing, the way every service talks to every other service,
+deployment, edge, secrets, merge gatekeeping.
+
+Files / dirs to own and demo:
+  docker-compose.yml                  full 13-container topology
+  Makefile                            developer entry points
+  .env.example                        env reference (do NOT commit .env)
+  .gitignore
+  LICENSE
+  README.md                           public-facing one-command run
+  TEAM_INSTRUCTIONS.txt               this file
+
+  infra/nginx/nginx.conf              RR upstream, SPA fallback, WS upgrade,
+                                      TLS-ready, Lua rate-limit hook
+  infra/nginx/lua/token_bucket.lua    edge rate limiter
+
+  ops/  (top-level shell glue, not the cron jobs themselves)
+
+  Phase 10 deliverables when reopened:
+    ops/deploy.sh                     SSH -> droplet, compose pull && up -d
+    .github/workflows/*.yml           CI -> GHCR
+    droplet bring-up notes / DNS / TLS via certbot
+
+What to say in the presentation:
+  "I own the way the 13 containers talk to each other, the edge that fronts
+  them, and the path from `git push` to a running droplet. The interesting
+  part is the Nginx + Lua token-bucket rate limiter (R11) and the single
+  docker-compose.yml that boots the whole platform with one command."
+
+
+================================================================================
+DEV B -- BACKEND CORE
+================================================================================
+Owns: the domain model and the anti-double-booking guarantee. If two users
+race for the same seat, exactly one wins -- this dev signs for that.
+
+Files / dirs to own and demo:
+  backend/Dockerfile
+  backend/pyproject.toml              Python deps + tooling pins
+  backend/alembic.ini
+
+  backend/app/main.py                 app factory, lifespan, /healthz, /readyz
+  backend/app/seed.py                 idempotent demo seed
+
+  backend/app/db/base.py              DeclarativeBase + naming convention
+  backend/app/db/session.py           sync engine, get_db()
+  backend/app/db/models.py            ALL entities (User, Org, Event, Room,
+                                      Seat, Hold-via-Redis, Order, Ticket,
+                                      Payout, ...)
+  backend/app/db/migrations/env.py
+  backend/app/db/migrations/script.py.mako
+  backend/app/db/migrations/versions/0001_init.py
+  backend/app/db/migrations/versions/0002_org_dashboard_matview.py
+  backend/app/db/migrations/versions/0003_zones_categories_card_holders.py
+  backend/app/db/migrations/versions/0004_payouts_currency_uniq.py
+  backend/app/db/migrations/versions/0005_drop_zones.py
+  backend/app/db/migrations/versions/0006_event_proposals.py
+
+  backend/app/api/auth.py             /auth/register, /auth/token, /auth/me
+  backend/app/api/events.py           /events list/detail/seats
+  backend/app/api/holds.py            /events/{id}/hold (Redis NX PX)
+  backend/app/api/orders.py           /events/{id}/orders, /me/tickets
+  backend/app/api/scans.py            /tickets/scan (gate-only)
+  backend/app/api/admin.py            /admin/refunds, /admin/proposals (list +
+                                      approve/reject; approve materialises
+                                      Venue / seated Room (rows×cols grid
+                                      derived from the requested seat count) /
+                                      Seat rows / Event / PriceTier in one tx,
+                                      then refreshes mv_event_browse_card and
+                                      reindexes Meilisearch)
+  backend/app/api/categories.py       price tiers
+  backend/app/api/schemas.py          Pydantic v2 request/response models
+
+  backend/app/core/config.py          Pydantic Settings, lru_cache
+  backend/app/core/deps.py            get_db, get_current_user, require_role
+  backend/app/core/security.py        bcrypt + jose JWT helpers
+
+  backend/app/services/holds.py       Redis seat-hold + GA-counter + atomic release
+  backend/app/services/booking.py     convert_hold_to_order, scan_ticket,
+                                      attach_qr_payloads
+  backend/app/services/qr.py          HS256 JWT for QR payload
+
+  backend/tests/test_smoke.py         pytest smoke battery
+
+What to say in the presentation:
+  "I own the domain. The headline result is the seat-hold lock: Redis
+  `SET NX PX 300000` keyed by `seat:{event_id}:{seat_id}`. We tested 30
+  concurrent holds on the same seat -- 1 success, 29 conflicts, zero
+  double-bookings. The TTL is the source of truth instead of a DB row,
+  so expiry is automatic and there is no orphan-cleanup race."
+
+
+================================================================================
+DEV C -- BACKEND PLATFORM
+================================================================================
+Owns: everything that makes the backend more than a CRUD app -- caching,
+search, real-time updates, async jobs, and observability.
+
+Files / dirs to own and demo:
+  backend/app/services/redis_client.py   shared lazy Redis client
+  backend/app/services/cache.py          hot-page cache (R6)
+  backend/app/services/search.py         Meilisearch indexer + query
+  backend/app/api/search.py              /search endpoint
+  backend/app/api/ws.py                  /ws/events/{id}/seats
+  backend/app/api/org.py                 /org/dashboard (matview-backed),
+                                         /org/proposals (organiser submits +
+                                         lists their own event proposals)
+  backend/app/ws/hub.py                  in-process WS pub/sub hub
+
+  backend/app/core/telemetry.py          OTel SDK wiring (traces + logs + metrics)
+
+  ops/cron/schedule.py                   APScheduler entrypoint
+  ops/cron/payouts.py                    nightly payouts job
+  ops/cron/rollup.py                     REFRESH MAT VIEW CONCURRENTLY
+  ops/cron/sweeper.py                    void stale pending orders
+
+  infra/otel/config.yaml                 OTLP -> Tempo / Loki / Prometheus
+  infra/prometheus/prometheus.yml
+  infra/tempo/tempo.yaml
+  infra/loki/loki.yaml
+  infra/grafana/provisioning/datasources/datasources.yaml
+  infra/grafana/provisioning/dashboards/dashboards.yaml
+  infra/grafana/dashboards/hold_pay_confirm.json
+
+What to say in the presentation:
+  "I own the polyglot persistence (Redis cache + Meilisearch), the live
+  seat map over WebSockets (sub-second updates from another browser), the
+  3 cron batch jobs (R10), and the full OTel -> Grafana pipeline (R12).
+  The headline trace is `hold -> pay -> confirm`, correlated with logs
+  and Prometheus metrics."
+
+
+================================================================================
+DEV D -- FRONTEND & UX
+================================================================================
+Owns: everything the user sees. The full React SPA plus the user-facing
+sections of the report (use cases, screenshots, R1).
+
+Files / dirs to own and demo:
+  frontend/Dockerfile                    multi-stage build
+  frontend/package.json
+  frontend/vite.config.ts                /api /ws /docs proxy
+  frontend/index.html
+  frontend/tsconfig*.json
+  frontend/eslint.config.js
+  frontend/tailwind.config.* / postcss.config.*
+
+  frontend/src/main.tsx                  Router + QueryClient + AuthProvider
+  frontend/src/App.tsx                   routes, Private wrapper
+  frontend/src/index.css
+  frontend/src/test-setup.ts
+
+  frontend/src/components/Nav.tsx
+  frontend/src/components/  (any other shared components)
+
+  frontend/src/lib/api.ts                axios client + bearer interceptor + types
+  frontend/src/lib/auth.tsx              AuthProvider component
+  frontend/src/lib/auth-context.ts       context + useAuth hook (split for HMR)
+
+  frontend/src/pages/Browse.tsx          listing + filter
+  frontend/src/pages/EventDetail.tsx     event landing
+  frontend/src/pages/Seats.tsx           live SVG seat map (WS-driven)
+  frontend/src/pages/Payment.tsx         mock payment UI
+  frontend/src/pages/MyTickets.tsx       attendee tickets w/ QR
+  frontend/src/pages/Login.tsx
+  frontend/src/pages/Register.tsx
+  frontend/src/pages/GateScan.tsx        gate operator scanner
+  frontend/src/pages/OrgEvents.tsx       organizer dashboard
+  frontend/src/pages/OrgAttendees.tsx
+  frontend/src/pages/Admin.tsx
+  frontend/src/pages/Holders.tsx
+
+  R1 use-case write-up + screenshots (presentation slides)
+
+What to say in the presentation:
+  "I own everything the user sees -- 12 pages across attendee, organizer,
+  gate-operator and admin flows. The fun bit is the SVG seat map: it's
+  driven by a WebSocket subscription so when another tab holds a seat,
+  yours greys out within a second. Bundle is 256 KB JS / 10 KB CSS."
+
+
+--------------------------------------------------------------------------------
+3. GIT -- WHAT TO PUSH / WHAT NOT TO PUSH
+--------------------------------------------------------------------------------
+
+PUSH (commit these):
+  - All source code (backend/, frontend/src/, ops/, infra/)
+  - All configs that are NOT secrets (docker-compose.yml, Makefile,
+    pyproject.toml, package.json, package-lock.json, tsconfig*.json,
+    nginx.conf, prometheus.yml, etc.)
+  - .env.example  (template only -- no real secrets)
+  - All migrations under backend/app/db/migrations/versions/  (NEVER edit
+    a merged migration -- always add a new one)
+  - README.md, TEAM_INSTRUCTIONS.txt
+  - .gitignore, LICENSE
+  - frontend/public/  if it exists (static assets)
+  - infra/grafana/dashboards/*.json (provisioned dashboards)
+
+DO NOT PUSH (already in .gitignore -- if you see them staged, unstage):
+  - .env                       real secrets, JWT signing key, DB password
+  - .env.local, .env.*         any environment variant
+  - backend/.venv/             local Python virtualenv
+  - frontend/node_modules/     install with `npm ci` instead
+  - frontend/dist/             build artifact, regenerated by Docker
+  - __pycache__/, *.pyc, .pytest_cache/, .mypy_cache/, .ruff_cache/
+  - postgres-data/, redis-data/, meili-data/, grafana-data/, tempo-data/,
+    loki-data/, prometheus-data/, .data/  (Docker volume mounts)
+  - frontend/src/**/*.js, *.js.map  (stale tsc emit -- only .ts/.tsx is source)
+  - .idea/, .vscode/, *.swp, .DS_Store, Thumbs.db
+  - *.log
+
+Commit hygiene:
+  - Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`...
+  - One concern per commit. If you fixed a bug AND added a feature, that's
+    two commits.
+  - Branch per feature: `feat/seat-hold-redis`, `fix/qr-replay-409`, etc.
+  - Open a PR. Dev A is the merge gatekeeper -- no direct push to `main`.
+  - If you add/remove a Python dependency, commit `pyproject.toml` AND make
+    sure CI rebuilds. If you add a frontend dep, commit BOTH `package.json`
+    AND `package-lock.json`.
+
+If you accidentally committed a secret:
+  - Tell Dev A immediately. Rotate the secret. Force-pushing history is a
+    Dev A decision, not yours.
+
+
+--------------------------------------------------------------------------------
+4. SETTING UP ON A FRESH PC (clone + run)
+--------------------------------------------------------------------------------
+
+Prerequisites (install manually -- the team does NOT auto-install system tools):
+  - Git
+  - Docker Desktop  (Windows/macOS) or Docker Engine + Compose v2 (Linux).
+    Wait for the engine to be fully started before running `docker` commands.
+  - Python 3.14  (only needed for local backend dev outside Docker)
+  - Node.js 20+ LTS  (only needed for local frontend dev outside Docker)
+  - GNU Make  (Windows: comes with Git Bash, or use `choco install make`)
+
+Step 1 -- clone:
+  git clone <repo-url> Conference_tickets
+  cd Conference_tickets
+
+Step 2 -- environment file:
+  cp .env.example .env
+  # Open .env and fill in the secrets that are blank or marked CHANGE-ME
+  # (JWT_SECRET, POSTGRES_PASSWORD, etc.). Ask Dev A for the shared values
+  # if you're joining the team. Never commit this file.
+
+Step 3 -- bring the stack up (one command):
+  docker compose up -d --build
+  # First run pulls ~3 GB of images and builds backend + frontend.
+  # Watch progress: docker compose ps
+  # All 13 containers should reach status "healthy" within ~2 min.
+
+Step 4 -- migrate + seed the database:
+  docker compose exec backend1 alembic upgrade head
+  docker compose exec backend1 python -m app.seed
+  # Seed is idempotent -- safe to re-run.
+  # NOTE: the service is `backend1` (not `backend`). There are two replicas:
+  # backend1 and backend2, behind nginx round-robin.
+
+Step 5 -- verify it's alive:
+  curl http://localhost/healthz                # -> {"status":"ok"}
+  curl http://localhost/api/events             # -> JSON list of seeded events
+  open http://localhost                        # SPA in the browser
+  open http://localhost/docs                   # Swagger UI
+  open http://localhost:3001                   # Grafana (anon viewer)
+
+Step 6 -- demo accounts (created by seed):
+  attendee@quick-conf.app  / demo1234   (role: attendee)
+  organizer@quick-conf.app / demo1234   (role: organizer)
+  gate@quick-conf.app      / demo1234   (role: gate)
+  admin@quick-conf.app     / demo1234   (role: admin)
+
+Pulling later updates:
+  git pull
+  docker compose up -d --build       # rebuilds only what changed
+  docker compose exec backend1 alembic upgrade head   # if migrations changed
+
+Tearing it down:
+  docker compose down                # stop containers, keep data volumes
+  docker compose down -v             # nuke data volumes too (full reset)
+
+Common knobs (set in .env):
+  RATE_LIMIT_RPS=10                  edge rate limiter
+  RATE_LIMIT_BURST=20
+  PAYMENT_PROVIDER=mock              the only supported value right now
+  HOLD_TTL_SECONDS=300               5-minute seat hold
+  JWT_SECRET=...                     MUST change in any deployed env
+
+Working on just one piece without the full stack:
+  Backend tests:
+    cd backend
+    python -m venv .venv && .venv/Scripts/activate   (or source .venv/bin/activate)
+    pip install -e ".[dev]"
+    pytest -q
+
+  Frontend dev server (with hot reload, talking to dockerized backend):
+    cd frontend
+    npm ci
+    npm run dev          # http://localhost:5173, /api proxied to :8000
+
+
+--------------------------------------------------------------------------------
+5. FIRST-RUN GOTCHAS (so you don't lose an afternoon)
+--------------------------------------------------------------------------------
+  - Healthchecks: alpine-based images resolve `localhost` to ::1 first.
+    Healthchecks use 127.0.0.1 explicitly. Don't "fix" this back to
+    localhost.
+  - bcrypt on Python 3.14: pin `bcrypt<4.1` -- passlib 1.7.4 crashes
+    against bcrypt 5.x. Already pinned in pyproject.toml.
+  - Cron container: needs PYTHONPATH=/app to import the `ops` package.
+    Already set in docker-compose.yml.
+  - Frontend volume race: nginx waits on the frontend image to copy dist
+    into the shared volume; if you see SPA 404s for ~5 seconds after
+    `up -d`, that's why.
+  - OpenResty image MUST be the `-fat` variant -- the slim one is missing
+    `lua-resty-redis` and the rate limiter will 500.
+
+
+--------------------------------------------------------------------------------
+6. WHERE TO GO FROM HERE
+--------------------------------------------------------------------------------
+  - Public-facing intro / one-command run:  README.md
+  - Team handbook (this file):              TEAM_INSTRUCTIONS.txt
+  - Live API reference:                     http://localhost/docs (Swagger UI)
+
+If something here is wrong or out of date, fix it in the same PR as the code
+change. Future-you will thank present-you.
+================================================================================

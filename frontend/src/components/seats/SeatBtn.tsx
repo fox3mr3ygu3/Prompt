@@ -2,9 +2,23 @@ import { CSSProperties } from "react";
 import { Seat } from "@/lib/api";
 
 export const SOLD_COLOR = "#3f3f46";
-export const FREE_COLOR = "#0000AA";
 export const HELD_COLOR = "#f59e0b";
 export const PICKED_COLOR = "#22c55e";
+
+// Tier colors — closer to stage = warmer / more expensive. Free seats use
+// the tier color so the price tier is visible at a glance on the hall.
+export const TIER_COLORS: Record<string, string> = {
+  Front: "#e11d48", // rose-600 — closest, priciest
+  Middle: "#2563eb", // blue-600
+  Back: "#0d9488", // teal-600 — back, cheapest
+};
+
+export const FREE_FALLBACK_COLOR = "#1d4ed8";
+
+export function tierColor(tierName: string | null | undefined): string {
+  if (!tierName) return FREE_FALLBACK_COLOR;
+  return TIER_COLORS[tierName] ?? FREE_FALLBACK_COLOR;
+}
 
 /** A single clickable seat. Disabled when sold or held by someone else. */
 export function SeatBtn({
@@ -18,8 +32,11 @@ export function SeatBtn({
   onClick: () => void;
   style?: CSSProperties;
 }) {
-  let bg = FREE_COLOR;
-  let title = `Row ${seat.row_label} seat ${seat.col_number}`;
+  const priceTag = seat.price_cents
+    ? ` — ${(seat.price_cents / 100).toFixed(0)} ${seat.currency}`
+    : "";
+  let bg = tierColor(seat.tier_name);
+  let title = `${seat.tier_name ?? "Seat"} · row ${seat.row_label} seat ${seat.col_number}${priceTag}`;
   let ringClass = "";
   let cursor = "cursor-pointer";
 
@@ -33,7 +50,7 @@ export function SeatBtn({
     cursor = "cursor-not-allowed";
   } else if (isPicked) {
     bg = PICKED_COLOR;
-    title = `Selected · row ${seat.row_label} seat ${seat.col_number}`;
+    title = `Selected · ${seat.tier_name ?? "Seat"} · row ${seat.row_label} seat ${seat.col_number}${priceTag}`;
     ringClass = "ring-2 ring-emerald-300/80";
   }
 

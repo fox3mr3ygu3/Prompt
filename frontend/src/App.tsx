@@ -9,6 +9,7 @@ import { Payment } from "@/pages/Payment";
 import { Login } from "@/pages/Login";
 import { Register } from "@/pages/Register";
 import { MyTickets } from "@/pages/MyTickets";
+import { Profile } from "@/pages/Profile";
 import { OrgEvents } from "@/pages/OrgEvents";
 import { OrgAttendees } from "@/pages/OrgAttendees";
 import { Admin } from "@/pages/Admin";
@@ -76,6 +77,14 @@ export default function App() {
           element={
             <Private>
               <MyTickets />
+            </Private>
+          }
+        />
+        <Route
+          path="/me/profile"
+          element={
+            <Private>
+              <Profile />
             </Private>
           }
         />

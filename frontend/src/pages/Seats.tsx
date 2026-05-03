@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiErr,
   EventDetail as EventDetailT,
+  Seat as SeatT,
   SeatMap,
   api,
 } from "@/lib/api";
@@ -89,15 +90,34 @@ export function Seats() {
     );
   }
 
+  // For GA rooms there's still one effective price; for seated rooms each
+  // picked seat carries its own tier price (closer rows cost more).
   const tier = detail?.price_tiers[0];
-  const seatPriceCents = tier?.price_cents ?? 0;
-  const currency = tier?.currency ?? "USD";
+  const gaPriceCents = tier?.price_cents ?? 0;
+  const currency = tier?.currency ?? seatMap?.seats[0]?.currency ?? "USD";
+
+  const pickedSeats = useMemo<SeatT[]>(() => {
+    if (!seatMap) return [];
+    const set = new Set(picked);
+    return seatMap.seats.filter((s) => set.has(s.id));
+  }, [seatMap, picked]);
 
   const totalCents = useMemo(() => {
     if (!detail) return 0;
-    if (detail.room.kind === "seated") return picked.length * seatPriceCents;
-    return seatPriceCents * gaQty;
-  }, [detail, picked, gaQty, seatPriceCents]);
+    if (detail.room.kind === "seated")
+      return pickedSeats.reduce((acc, s) => acc + s.price_cents, 0);
+    return gaPriceCents * gaQty;
+  }, [detail, pickedSeats, gaQty, gaPriceCents]);
+
+  const tierBreakdown = useMemo(() => {
+    if (!detail || detail.room.kind !== "seated") return [];
+    const counts = new Map<string, number>();
+    for (const s of pickedSeats) {
+      const k = s.tier_name ?? "Seat";
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    return [...counts.entries()];
+  }, [detail, pickedSeats]);
 
   async function onContinue() {
     if (!detail) return;
@@ -162,14 +182,20 @@ export function Seats() {
       <p className="text-slate-400">
         {detail.venue.name} · {detail.venue.city} · {detail.room.name}
       </p>
-      {tier && (
+      {tier && isSeated ? (
         <p className="mt-1 text-sm text-slate-400">
-          All seats:{" "}
-          <span className="font-semibold text-sky-300">
-            {fmtMoney(tier.price_cents, tier.currency)}
-          </span>{" "}
-          each
+          Closer to the stage costs more — pick a row and the price updates
+          live below.
         </p>
+      ) : (
+        tier && (
+          <p className="mt-1 text-sm text-slate-400">
+            Ticket price:{" "}
+            <span className="font-semibold text-sky-300">
+              {fmtMoney(tier.price_cents, tier.currency)}
+            </span>
+          </p>
+        )
       )}
 
       {isSeated ? (
@@ -182,7 +208,7 @@ export function Seats() {
         </div>
       ) : (
         <GAPicker
-          tierPriceCents={seatPriceCents}
+          tierPriceCents={gaPriceCents}
           tierCurrency={currency}
           qty={gaQty}
           onChange={setGaQty}
@@ -195,6 +221,7 @@ export function Seats() {
         gaQty={gaQty}
         total={totalCents}
         currency={currency}
+        tierBreakdown={tierBreakdown}
         canContinue={canContinue}
         busy={busy}
         error={error}
@@ -210,6 +237,7 @@ function ContinueBar({
   gaQty,
   total,
   currency,
+  tierBreakdown,
   canContinue,
   busy,
   error,
@@ -220,6 +248,7 @@ function ContinueBar({
   gaQty: number;
   total: number;
   currency: string;
+  tierBreakdown: [string, number][];
   canContinue: boolean;
   busy: boolean;
   error: string | null;
@@ -234,6 +263,13 @@ function ContinueBar({
               Selected:{" "}
               <span className="font-semibold text-white">{pickedCount}</span>{" "}
               seat{pickedCount === 1 ? "" : "s"}
+              {tierBreakdown.length > 0 && (
+                <span className="ml-2 text-xs text-slate-400">
+                  ({tierBreakdown
+                    .map(([name, n]) => `${n} ${name}`)
+                    .join(" · ")})
+                </span>
+              )}
             </>
           ) : (
             <>

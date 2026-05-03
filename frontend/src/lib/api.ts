@@ -113,6 +113,9 @@ export type Seat = {
   row_label: string;
   col_number: number;
   state: "free" | "held" | "sold";
+  tier_name: string | null;
+  price_cents: number;
+  currency: string;
 };
 
 export type SeatMap = {
@@ -224,6 +227,43 @@ export type ScanResult = {
   ticket_id: string | null;
   event_id: string | null;
   detail: string;
+};
+
+export type ProfileStats = {
+  total: number;
+  valid: number;
+  used: number;
+  refunded: number;
+  spent_cents: number;
+  currency: string;
+};
+
+export type AttendeeProfile = {
+  stats: ProfileStats;
+  recent_tickets: MyTicket[];
+};
+
+export type OrganiserProfile = {
+  organisation_id: string | null;
+  organisation_name: string;
+  organisation_slug: string;
+  event_count: number;
+  attendee_count: number;
+  gross_cents: number;
+  currency: string;
+  recent_events: OrgEvent[];
+};
+
+export type Profile = {
+  user: {
+    id: string;
+    email: string;
+    full_name: string;
+    role: string;
+    created_at: string;
+  };
+  attendee: AttendeeProfile | null;
+  organiser: OrganiserProfile | null;
 };
 
 export type ProposalStatus = "pending" | "approved" | "rejected";

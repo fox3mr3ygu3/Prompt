@@ -45,6 +45,7 @@ from app.db.models import (
     UserRole,
     Venue,
 )
+from app.services import pricing
 from app.services import search as search_svc
 from app.services.cache import invalidate_event
 
@@ -324,14 +325,21 @@ def approve_proposal(
     db.add(event)
     db.flush()
 
-    tier = PriceTier(
-        event_id=event.id,
-        name="Standard",
-        price_cents=proposal.price_cents,
-        currency=proposal.currency,
-        capacity=proposal.seats,
-    )
-    db.add(tier)
+    # Three row-priced tiers — Front (1.5×), Middle (1.0×), Back (0.7×).
+    # The booking service maps each seat's row to a tier at ticket-issue
+    # time (see app.services.pricing + app.services.booking), so the
+    # closer-to-stage rows charge the higher tier price.
+    tier_capacities = pricing.split_capacity(proposal.seats)
+    for tier_name, tier_price in pricing.tiered_prices(proposal.price_cents):
+        db.add(
+            PriceTier(
+                event_id=event.id,
+                name=tier_name,
+                price_cents=tier_price,
+                currency=proposal.currency,
+                capacity=tier_capacities[tier_name],
+            )
+        )
 
     proposal.status = ProposalStatus.approved
     proposal.decided_at = _now_utc()

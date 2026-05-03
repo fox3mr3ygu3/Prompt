@@ -26,7 +26,14 @@ export function EventDetail() {
   if (error || !detail)
     return <p className="mx-auto max-w-4xl px-4 py-12 text-red-400">Failed to load event.</p>;
 
-  const tier = detail.price_tiers[0] ?? null;
+  // Pick the cheapest tier for the "From" headline price; the seat picker
+  // shows the per-tier breakdown once the buyer enters the hall.
+  const cheapestTier =
+    [...detail.price_tiers].sort((a, b) => a.price_cents - b.price_cents)[0] ??
+    null;
+  const priciestTier =
+    [...detail.price_tiers].sort((a, b) => b.price_cents - a.price_cents)[0] ??
+    null;
   const startsAt = new Date(detail.starts_at);
 
   return (
@@ -51,7 +58,8 @@ export function EventDetail() {
         </div>
 
         <CtaCard
-          tier={tier}
+          cheapestTier={cheapestTier}
+          priciestTier={priciestTier}
           roomKind={detail.room.kind}
           roomName={detail.room.name}
           venueName={detail.venue.name}
@@ -153,18 +161,24 @@ function SpeakerRow({ name, affiliation }: { name: string; affiliation: string }
 }
 
 function CtaCard({
-  tier,
+  cheapestTier,
+  priciestTier,
   roomKind,
   roomName,
   venueName,
   onGetTickets,
 }: {
-  tier: { price_cents: number; currency: string } | null;
+  cheapestTier: { price_cents: number; currency: string } | null;
+  priciestTier: { price_cents: number; currency: string } | null;
   roomKind: "seated" | "general";
   roomName: string;
   venueName: string;
   onGetTickets: () => void;
 }) {
+  const hasRange =
+    !!cheapestTier &&
+    !!priciestTier &&
+    priciestTier.price_cents > cheapestTier.price_cents;
   return (
     <aside className="lg:col-span-1">
       <div className="sticky top-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
@@ -173,22 +187,33 @@ function CtaCard({
         <div className="text-xs text-slate-500">at {venueName}</div>
 
         <div className="mt-4 text-xs uppercase tracking-wide text-slate-400">
-          Ticket price
+          {hasRange ? "From" : "Ticket price"}
         </div>
-        <div className="mt-1 text-3xl font-bold text-white">
-          {tier ? fmtMoney(tier.price_cents, tier.currency) : "—"}
+        <div className="mt-1 flex items-baseline gap-2 text-white">
+          <span className="text-3xl font-bold">
+            {cheapestTier
+              ? fmtMoney(cheapestTier.price_cents, cheapestTier.currency)
+              : "—"}
+          </span>
+          {hasRange && priciestTier && (
+            <span className="text-sm text-slate-400">
+              up to {fmtMoney(priciestTier.price_cents, priciestTier.currency)}
+            </span>
+          )}
         </div>
         <button
           type="button"
           onClick={onGetTickets}
-          disabled={!tier}
+          disabled={!cheapestTier}
           className="mt-4 w-full rounded-lg bg-sky-500 px-4 py-2.5 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700"
         >
-          {tier ? "Get tickets →" : "Not on sale"}
+          {cheapestTier ? "Get tickets →" : "Not on sale"}
         </button>
         <p className="mt-3 text-xs text-slate-500">
           {roomKind === "seated"
-            ? "Pick exactly the seats you want."
+            ? hasRange
+              ? "Closer rows cost more — pick exactly the seats you want."
+              : "Pick exactly the seats you want."
             : "General admission, by quantity."}
         </p>
       </div>

@@ -1,18 +1,19 @@
 import { useMemo } from "react";
 import { Seat, SeatMap } from "@/lib/api";
+import { fmtMoney } from "@/lib/format";
 import {
-  FREE_COLOR,
   HELD_COLOR,
   PICKED_COLOR,
   RowLabel,
   SOLD_COLOR,
   SeatBtn,
   Swatch,
+  TIER_COLORS,
 } from "./SeatBtn";
 
 /** Render the seated hall: stage at top, then rows of labelled seats.
- *  Every seat in an event costs the same, so the hall is one uniform
- *  block with a small free/picked/held/sold legend. */
+ *  Seats are colored by their price tier — closer to the stage costs more,
+ *  and the legend lists every tier with its current price. */
 export function SeatedHall({
   seatMap,
   picked,
@@ -36,6 +37,28 @@ export function SeatedHall({
         seats.slice().sort((a, b) => a.col_number - b.col_number),
       ])
       .sort(([a], [b]) => a.localeCompare(b));
+  }, [seatMap]);
+
+  const tierSummary = useMemo(() => {
+    if (!seatMap) return [] as { name: string; price_cents: number; currency: string }[];
+    const seen = new Map<
+      string,
+      { name: string; price_cents: number; currency: string }
+    >();
+    for (const s of seatMap.seats) {
+      if (!s.tier_name || seen.has(s.tier_name)) continue;
+      seen.set(s.tier_name, {
+        name: s.tier_name,
+        price_cents: s.price_cents,
+        currency: s.currency,
+      });
+    }
+    const order = ["Front", "Middle", "Back"];
+    return [...seen.values()].sort(
+      (a, b) =>
+        (order.indexOf(a.name) === -1 ? 99 : order.indexOf(a.name)) -
+        (order.indexOf(b.name) === -1 ? 99 : order.indexOf(b.name)),
+    );
   }, [seatMap]);
 
   if (!seatMap || !grid)
@@ -80,6 +103,7 @@ export function SeatedHall({
         })}
       </div>
 
+      <TierLegend tiers={tierSummary} />
       <HallStateLegend />
     </div>
   );
@@ -102,10 +126,33 @@ function Stage({ roomName }: { roomName: string }) {
   );
 }
 
+function TierLegend({
+  tiers,
+}: {
+  tiers: { name: string; price_cents: number; currency: string }[];
+}) {
+  if (tiers.length === 0) return null;
+  return (
+    <div className="mx-auto mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-slate-300">
+      {tiers.map((t) => (
+        <span key={t.name} className="inline-flex items-center gap-2">
+          <span
+            className="inline-block h-3 w-3 rounded"
+            style={{ background: TIER_COLORS[t.name] ?? "#1d4ed8" }}
+          />
+          <span className="font-semibold">{t.name}</span>
+          <span className="text-slate-400">
+            {fmtMoney(t.price_cents, t.currency)}
+          </span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function HallStateLegend() {
   return (
-    <div className="mx-auto mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-slate-800 pt-4 text-xs text-slate-400">
-      <Swatch label="Available" color={FREE_COLOR} />
+    <div className="mx-auto mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 border-t border-slate-800 pt-3 text-xs text-slate-400">
       <Swatch label="Selected" color={PICKED_COLOR} />
       <Swatch label="Held" color={HELD_COLOR} />
       <Swatch label="Sold" color={SOLD_COLOR} />

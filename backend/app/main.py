@@ -24,6 +24,7 @@ from app.api import (
     holds as holds_router,
     orders,
     org,
+    profile,
     scans,
     search,
     ws,
@@ -103,6 +104,7 @@ def create_app() -> FastAPI:
     app.include_router(holds_router.router, prefix=api_prefix)
     app.include_router(orders.router, prefix=api_prefix)
     app.include_router(orders.me_router, prefix=api_prefix)
+    app.include_router(profile.router, prefix=api_prefix)
     app.include_router(scans.router, prefix=api_prefix)
     app.include_router(org.router, prefix=api_prefix)
     app.include_router(admin.router, prefix=api_prefix)

@@ -18,8 +18,10 @@ What gets seeded:
 - 1 venue with 7 distinct rooms — every event gets a real seated hall so
   the user can pick a labelled seat ("A2") on every page. Music goes into
   the Concert Hall, sports into the Stadium Section, etc.
-- 12 events spread across categories. Each event has a single ``PriceTier``
-  ("Standard") — there are no zones, every seat in the hall costs the same.
+- 12 events spread across categories. Each event has three ``PriceTier``
+  rows — Front (1.5×), Middle (1.0×), Back (0.7×) — derived from the spec
+  base price. The seat → tier mapping is by row band: closer to the stage
+  is more expensive.
 - Meilisearch is bulk-indexed at the end (best-effort).
 """
 
@@ -48,6 +50,7 @@ from app.db.models import (
     Venue,
 )
 from app.db.session import SessionLocal
+from app.services import pricing
 from app.services import search as search_svc
 
 log = logging.getLogger("seed")
@@ -240,6 +243,45 @@ def _ensure_tier(
         tier.price_cents = price_cents
         tier.capacity = capacity
     return tier
+
+
+def _ensure_row_priced_tiers(
+    db: Session, *, event: Event, base_price_cents: int, total_seats: int
+) -> list[PriceTier]:
+    """Materialise the canonical Front/Middle/Back tiers off ``base_price_cents``.
+
+    Multipliers + capacity split come from ``app.services.pricing`` so the
+    seat-map endpoint and the booking service agree on which seat falls in
+    which band.
+    """
+    capacity = pricing.split_capacity(total_seats)
+    out: list[PriceTier] = []
+    for name, price in pricing.tiered_prices(base_price_cents):
+        out.append(
+            _ensure_tier(
+                db,
+                event=event,
+                name=name,
+                price_cents=price,
+                capacity=capacity[name],
+            )
+        )
+    # Drop any orphan "Standard" tier from before the row-priced switch.
+    legacy = db.execute(
+        select(PriceTier).where(
+            PriceTier.event_id == event.id, PriceTier.name == "Standard"
+        )
+    ).scalar_one_or_none()
+    if legacy is not None:
+        from app.db.models import Ticket as _Ticket
+
+        referenced = db.execute(
+            select(_Ticket.id).where(_Ticket.price_tier_id == legacy.id).limit(1)
+        ).scalar_one_or_none()
+        if referenced is None:
+            db.delete(legacy)
+            db.flush()
+    return out
 
 
 def _ensure_speaker(db: Session, *, name: str, affiliation: str) -> Speaker:
@@ -479,7 +521,7 @@ def run() -> None:
             ),
         ]
 
-        seeded_events: list[tuple[Event, PriceTier, Room]] = []
+        seeded_events: list[tuple[Event, list[PriceTier], Room]] = []
         for spec in events_spec:
             ev = _ensure_event(
                 db,
@@ -493,14 +535,13 @@ def run() -> None:
                 cover_image_url=_cover(spec["slug"]),
                 starts_at=now + timedelta(days=spec["days_out"]),
             )
-            tier = _ensure_tier(
+            tiers = _ensure_row_priced_tiers(
                 db,
                 event=ev,
-                name="Standard",
-                price_cents=spec["price_cents"],
-                capacity=spec["room"].capacity,
+                base_price_cents=spec["price_cents"],
+                total_seats=spec["room"].capacity,
             )
-            seeded_events.append((ev, tier, spec["room"]))
+            seeded_events.append((ev, tiers, spec["room"]))
 
         # ── Speakers (M2M) ─────────────────────────────────────────────────
         sp_alice = _ensure_speaker(db, name="Dr. Alice Kim", affiliation="Inha University")

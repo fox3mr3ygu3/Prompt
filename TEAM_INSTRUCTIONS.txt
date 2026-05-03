@@ -134,6 +134,9 @@ Files / dirs to own and demo:
   backend/app/api/events.py           /events list/detail/seats
   backend/app/api/holds.py            /events/{id}/hold (Redis NX PX)
   backend/app/api/orders.py           /events/{id}/orders, /me/tickets
+  backend/app/api/profile.py          /me/profile (DB-driven attendee +
+                                      organiser branches: identity, ticket
+                                      counts/spend OR org KPIs/recent events)
   backend/app/api/scans.py            /tickets/scan (gate-only)
   backend/app/api/admin.py            /admin/refunds, /admin/proposals (list +
                                       approve/reject; approve materialises
@@ -236,6 +239,11 @@ Files / dirs to own and demo:
   frontend/src/pages/Seats.tsx           live SVG seat map (WS-driven)
   frontend/src/pages/Payment.tsx         mock payment UI
   frontend/src/pages/MyTickets.tsx       attendee tickets w/ QR
+  frontend/src/pages/Profile.tsx         per-role profile: attendee sees
+                                         purchased tickets + spend roll-up,
+                                         organiser sees org KPIs + recent
+                                         events. Reads /me/profile only --
+                                         every value comes from Postgres.
   frontend/src/pages/Login.tsx
   frontend/src/pages/Register.tsx
   frontend/src/pages/GateScan.tsx        gate operator scanner
@@ -401,4 +409,145 @@ Working on just one piece without the full stack:
 
 If something here is wrong or out of date, fix it in the same PR as the code
 change. Future-you will thank present-you.
+
+
+--------------------------------------------------------------------------------
+7. PROFILE FEATURE -- 7-DAY ROLLOUT (per-dev daily commits)
+--------------------------------------------------------------------------------
+The Profile page is a per-role landing surface added to the navbar:
+  - Attendee:  identity card, ticket-status counts, lifetime spend, last 5
+               purchased tickets (link to /me/tickets for the full list).
+  - Organiser: identity card, organisation header, event/attendee/gross
+               KPIs, last 5 events with capacity + scanned + gross (link to
+               /org/events for the full list).
+
+Hard rule for this feature: every number on the page is computed from
+Postgres on the request that paints it. No Redis-cached snapshots, no
+matview reads on the profile path. The DB is the single source of truth.
+
+Branch convention: `feat/profile-<dev>-<scope>` (e.g.
+`feat/profile-b-endpoint`). One concern per commit, one PR per scope.
+Dev A is the merge gatekeeper -- no direct push to main.
+
+The schedule below assigns a single push to one dev per day. Each row is
+sized to be a believable end-of-day commit; pair PRs are noted where two
+devs need to land changes on the same day.
+
+================================================================================
+DAY 1 -- contract + skeleton
+================================================================================
+Dev B (backend core)
+  push: backend/app/api/schemas.py
+  what: add ProfileStats, AttendeeProfileOut, OrganiserProfileOut, ProfileOut
+        schemas + __all__ entries. No endpoint yet -- just the contract.
+  commit: feat(profile): add ProfileOut + branch schemas
+
+Dev D (frontend & UX)
+  push: frontend/src/lib/api.ts
+  what: mirror the four new types (ProfileStats, AttendeeProfile,
+        OrganiserProfile, Profile) so the SPA compiles against the contract
+        the moment Dev B's PR merges.
+  commit: feat(profile): add Profile + branch types to api.ts
+
+================================================================================
+DAY 2 -- backend endpoint
+================================================================================
+Dev B (backend core)
+  push: backend/app/api/profile.py
+        backend/app/main.py             (router registration)
+  what: GET /me/profile -- DB-only aggregation. Attendee branch: ticket-
+        status counts, spend, last 5 tickets joined with event/venue/seat/
+        price. Organiser branch: org row + event/attendee/gross totals +
+        last 5 events. Wire the router under /api in main.py.
+  commit: feat(profile): /me/profile endpoint, DB single source of truth
+  verify: curl -H "Authorization: Bearer <token>" \
+          http://localhost/api/me/profile | jq .
+
+================================================================================
+DAY 3 -- backend test coverage
+================================================================================
+Dev B (backend core)
+  push: backend/tests/test_smoke.py
+  what: extend the smoke battery -- attendee profile sees their tickets and
+        spend; organiser profile sees their org + recent events; gate role
+        gets attendee branch with empty arrays; counts ignore void tickets;
+        refunded tickets count toward `total` and `refunded` but not spend.
+  commit: test(profile): smoke coverage for /me/profile branches
+
+================================================================================
+DAY 4 -- frontend page
+================================================================================
+Dev D (frontend & UX)
+  push: frontend/src/pages/Profile.tsx
+        frontend/src/App.tsx            (add /me/profile route under <Private>)
+  what: render the identity card + role-specific blocks. React-Query
+        polls /me/profile every 15s so refunds/scans propagate. Empty
+        states for "no tickets yet" and "no events yet" deep-link into
+        Browse / OrgEvents.
+  commit: feat(profile): Profile page + /me/profile route
+
+================================================================================
+DAY 5 -- navbar + auth wiring
+================================================================================
+Dev D (frontend & UX)
+  push: frontend/src/components/Nav.tsx
+  what: add the "Profile" NavLink for attendee AND organiser roles; gate +
+        admin keep their existing entries. Verify the NavLink active state
+        on /me/profile in both light and dark backgrounds.
+  commit: feat(profile): nav entry for attendee + organiser
+  verify: log in as attendee@quick-conf.app and organizer@quick-conf.app,
+          confirm the Profile link appears for both and routes correctly.
+
+================================================================================
+DAY 6 -- observability + edge
+================================================================================
+Dev C (backend platform)
+  push: infra/grafana/dashboards/profile_latency.json
+  what: a Profile dashboard panel set: p50/p95 of /api/me/profile, branch
+        breakdown (attendee vs organiser), and the SQL query timings via
+        OTel spans. Reuses the existing Tempo/Prom datasources.
+  commit: feat(profile): Grafana dashboard for /me/profile
+
+Dev A (lead / infra & integration)
+  push: infra/nginx/nginx.conf
+  what: add the /api/me/profile route to the existing rate-limit map so it
+        shares the authenticated-user bucket and doesn't bypass R11.
+  commit: chore(profile): bring /me/profile under the edge rate limiter
+
+================================================================================
+DAY 7 -- docs + ship
+================================================================================
+Dev A (lead / infra & integration)
+  push: README.md
+        TEAM_INSTRUCTIONS.txt           (this section, as part of the same
+                                         feature merge)
+  what: add a "Profile" line to the user-visible feature list in README,
+        bump the demo-tour blurb. Confirm TEAM_INSTRUCTIONS reflects the
+        new files in §2.
+  commit: docs(profile): document the per-role profile page
+
+Dev D (frontend & UX)
+  push: frontend/src/pages/Profile.tsx           (polish pass)
+  what: final UX pass after stakeholder review -- copy tweaks, empty-state
+        wording, mobile-stack check at <640px. No logic changes.
+  commit: chore(profile): copy + responsive polish
+
+After Day 7: feature is on main. No flags to clean up -- the page is
+gated by <Private> + role check at the navbar level, so it's safe to ship
+with no follow-up agent.
+
+What each dev says in the demo:
+  Dev A -- "I gated the new endpoint behind the same edge rate limiter as
+            the rest of /api so it inherits R11. Docs updated in the same PR."
+  Dev B -- "I added a single SQL aggregation per branch. The attendee
+            branch is one CASE-summing query plus a top-5 join; the
+            organiser branch is two queries against events + tickets. No
+            cache, no matview -- the DB is the source of truth."
+  Dev C -- "The Grafana panels show the profile p95 alongside the existing
+            hold->pay->confirm trace, so we can see if the new query
+            regresses overall API latency."
+  Dev D -- "The page reuses MyTicket and OrgEvent shapes the SPA already
+            knows, so the diff is mostly markup. The nav entry is the
+            single point of discoverability for both roles."
+
 ================================================================================

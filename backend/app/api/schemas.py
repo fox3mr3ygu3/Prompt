@@ -140,6 +140,11 @@ class SeatOut(_ReadModel):
     row_label: str
     col_number: int
     state: str  # "free" | "held" | "sold"
+    # Tier name + price are derived from the seat's row band — closer to the
+    # stage = pricier. ``None`` only on rooms with no price tiers configured.
+    tier_name: str | None = None
+    price_cents: int = 0
+    currency: str = "USD"
 
 
 class SeatMap(_ReadModel):
@@ -352,6 +357,49 @@ class ProposalOut(_ReadModel):
     submitter_email: str | None = None
 
 
+class ProfileStats(_ReadModel):
+    """Attendee-side ticket roll-up rendered on the profile page."""
+
+    total: int
+    valid: int
+    used: int
+    refunded: int
+    spent_cents: int
+    currency: str
+
+
+class AttendeeProfileOut(_ReadModel):
+    """Attendee branch of GET /me/profile — counts plus recent purchases."""
+
+    stats: ProfileStats
+    recent_tickets: list[MyTicketOut]
+
+
+class OrganiserProfileOut(_ReadModel):
+    """Organiser branch of GET /me/profile — org KPIs plus recent events."""
+
+    organisation_id: uuid.UUID | None
+    organisation_name: str
+    organisation_slug: str
+    event_count: int
+    attendee_count: int
+    gross_cents: int
+    currency: str
+    recent_events: list[OrgEventOut]
+
+
+class ProfileOut(_ReadModel):
+    """Combined identity + role-specific aggregates.
+
+    Exactly one of ``attendee`` / ``organiser`` is populated, picked by the
+    user's role on the server. The SPA renders whichever branch is present.
+    """
+
+    user: UserOut
+    attendee: AttendeeProfileOut | None = None
+    organiser: OrganiserProfileOut | None = None
+
+
 class AdminTicketOut(_ReadModel):
     """One row on the admin tickets table.
 
@@ -378,6 +426,7 @@ class AdminTicketOut(_ReadModel):
 __all__ = [
     "AdminTicketOut",
     "AttendeeOut",
+    "AttendeeProfileOut",
     "CardForm",
     "CategoryOut",
     "CategoryTreeNode",
@@ -391,7 +440,10 @@ __all__ = [
     "OrderCreate",
     "OrderOut",
     "OrgEventOut",
+    "OrganiserProfileOut",
     "PriceTierOut",
+    "ProfileOut",
+    "ProfileStats",
     "ProposalCreate",
     "ProposalOut",
     "ProposalRejectRequest",

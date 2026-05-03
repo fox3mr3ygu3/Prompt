@@ -33,6 +33,7 @@ from app.db.models import (
     Event,
     Order,
     OrderStatus,
+    PriceTier,
     Room,
     RoomKind,
     Scan,
@@ -41,7 +42,7 @@ from app.db.models import (
     Ticket,
     TicketStatus,
 )
-from app.services import holds, qr
+from app.services import holds, pricing, qr
 from app.services.cache import invalidate_event
 from app.ws.hub import hub
 
@@ -96,9 +97,16 @@ async def convert_hold_to_order(
     if room is None:
         raise BookingError("room missing")
 
-    tier = event.price_tiers[0] if event.price_tiers else None
-    if tier is None:
+    if not event.price_tiers:
         raise BookingError("event has no price tier configured")
+    tiers_by_name: dict[str, PriceTier] = {t.name: t for t in event.price_tiers}
+    # Default tier — used for GA rooms and as a fallback when a row band
+    # has no matching tier configured for this event.
+    default_tier = (
+        tiers_by_name.get("Middle")
+        or tiers_by_name.get("Standard")
+        or event.price_tiers[0]
+    )
 
     # ── Re-validate the hold ────────────────────────────────────────────────
     if room.kind is RoomKind.seated:
@@ -124,15 +132,33 @@ async def convert_hold_to_order(
 
     # ── Resolve seat objects (seated path) ─────────────────────────────────
     seat_objs: list[Seat] = []
+    sorted_room_rows: list[str] = []
     if room.kind is RoomKind.seated:
         seat_objs = list(
             db.execute(select(Seat).where(Seat.id.in_(seat_ids))).scalars().all()
         )
         if len(seat_objs) != len(seat_ids):
             raise BookingError("one or more seats not found")
+        # All distinct row labels in this room — used to map a seat's row
+        # to its tier band (Front/Middle/Back). Pulled separately so we
+        # don't lazy-load every seat in the room just to count rows.
+        sorted_room_rows = sorted(
+            r
+            for r, in db.execute(
+                select(Seat.row_label).where(Seat.room_id == room.id).distinct()
+            )
+        )
 
-    total_cents = tier.price_cents * ticket_count
-    currency = tier.currency
+    def _tier_for_seat(seat: Seat) -> PriceTier:
+        """Resolve the price tier for ``seat`` from its row band."""
+        band = pricing.band_for_row_label(seat.row_label, sorted_room_rows)
+        return tiers_by_name.get(band, default_tier)
+
+    if room.kind is RoomKind.seated:
+        total_cents = sum(_tier_for_seat(s).price_cents for s in seat_objs)
+    else:
+        total_cents = default_tier.price_cents * ticket_count
+    currency = default_tier.currency
 
     # ── Insert order ───────────────────────────────────────────────────────
     order = Order(
@@ -165,12 +191,13 @@ async def convert_hold_to_order(
             raise BookingError("holders.seat_id set does not match held seats")
         for s in seat_objs:
             h = holders_by_seat[s.id]
+            seat_tier = _tier_for_seat(s)
             db.add(
                 Ticket(
                     order_id=order.id,
                     event_id=event.id,
                     seat_id=s.id,
-                    price_tier_id=tier.id,
+                    price_tier_id=seat_tier.id,
                     first_name=str(h["first_name"]).strip()[:128],
                     last_name=str(h["last_name"]).strip()[:128],
                     status=TicketStatus.valid,
@@ -183,7 +210,7 @@ async def convert_hold_to_order(
                     order_id=order.id,
                     event_id=event.id,
                     seat_id=None,
-                    price_tier_id=tier.id,
+                    price_tier_id=default_tier.id,
                     first_name=str(h["first_name"]).strip()[:128],
                     last_name=str(h["last_name"]).strip()[:128],
                     status=TicketStatus.valid,

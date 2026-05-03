@@ -37,8 +37,8 @@ from app.api.schemas import (
     VenueOut,
 )
 from app.core.deps import DbDep
-from app.db.models import Event, Room, Ticket, TicketStatus
-from app.services import cache, holds
+from app.db.models import Event, PriceTier, Room, Ticket, TicketStatus
+from app.services import cache, holds, pricing
 from app.services import search as search_svc
 
 router = APIRouter(prefix="/events", tags=["events"])
@@ -254,6 +254,26 @@ def get_seat_map(event_ref: str, db: DbDep) -> SeatMap:
         if sid is not None
     }
     held_set = holds.held_seats(event.id)
+
+    # Tag each seat with its row's tier price. Tiers are addressed by name
+    # (Front / Middle / Back) — the row → name mapping is a pure function
+    # over the room's sorted distinct row labels, so the answer is the same
+    # for every request as long as the seats table doesn't change.
+    tiers_by_name: dict[str, PriceTier] = {
+        t.name: t
+        for t in db.execute(
+            select(PriceTier).where(PriceTier.event_id == event.id)
+        ).scalars()
+    }
+    sorted_rows = sorted({s.row_label for s in room.seats})
+
+    def _price_for(row_label: str) -> tuple[str | None, int, str]:
+        if not tiers_by_name:
+            return None, 0, "USD"
+        band = pricing.band_for_row_label(row_label, sorted_rows)
+        tier = tiers_by_name.get(band) or next(iter(tiers_by_name.values()))
+        return tier.name, tier.price_cents, tier.currency
+
     seat_outs: list[SeatOut] = []
     for s in sorted(room.seats, key=lambda s: (s.row_label, s.col_number)):
         if s.id in sold_seat_ids:
@@ -262,12 +282,16 @@ def get_seat_map(event_ref: str, db: DbDep) -> SeatMap:
             state = "held"
         else:
             state = "free"
+        tier_name, price_cents, currency = _price_for(s.row_label)
         seat_outs.append(
             SeatOut(
                 id=s.id,
                 row_label=s.row_label,
                 col_number=s.col_number,
                 state=state,
+                tier_name=tier_name,
+                price_cents=price_cents,
+                currency=currency,
             )
         )
     return SeatMap(

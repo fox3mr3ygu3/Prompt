@@ -114,8 +114,10 @@ services:
       - ./infra/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
       - ./infra/nginx/lua:/etc/nginx/lua:ro
       - frontend-dist:/var/www/html:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
     ports:
       - "80:80"
+      - "443:443"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/healthz"]
       interval: 10s

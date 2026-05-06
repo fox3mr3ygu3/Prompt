@@ -61,7 +61,7 @@ services:
       timeout: 3s
       retries: 10
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
 
   meili:
     image: getmeili/meilisearch:v1.10

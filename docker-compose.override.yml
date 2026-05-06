@@ -1,0 +1,6 @@
+services:
+  nginx:
+    volumes:
+      - ./infra/nginx/nginx.dev.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./infra/nginx/lua:/etc/nginx/lua:ro
+      - frontend-dist:/var/www/html:ro

@@ -1,0 +1,26 @@
+From 7603bbceb1be8e386695d8e03afbcf9eb15a80bb Mon Sep 17 00:00:00 2001
+From: Deploy Bot <deploy@quick-conf.app>
+Date: Wed, 6 May 2026 06:28:32 +0000
+Subject: [PATCH 1/2] security: bind redis to localhost only (DO security
+ notice)
+
+---
+ docker-compose.yml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/docker-compose.yml b/docker-compose.yml
+index bb52d69..b333a78 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -61,7 +61,7 @@ services:
+       timeout: 3s
+       retries: 10
+     ports:
+-      - "6379:6379"
++      - "127.0.0.1:6379:6379"
+ 
+   meili:
+     image: getmeili/meilisearch:v1.10
+-- 
+2.43.0
+

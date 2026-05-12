@@ -1,13 +1,147 @@
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
   color-scheme: dark;
+  --qc-ink: #070a0f;
+  --qc-ivory: #f7f1e6;
 }
 
 html,
 body,
 #root {
   height: 100%;
+}
+
+html {
+  background: var(--qc-ink);
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    linear-gradient(120deg, rgba(255, 107, 74, 0.08), transparent 30%),
+    linear-gradient(240deg, rgba(84, 214, 207, 0.08), transparent 28%), #070a0f;
+  color: var(--qc-ivory);
+  font-family: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  pointer-events: none;
+  opacity: 0.055;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.78' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.65'/%3E%3C/svg%3E");
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(247, 241, 230, 0.24) rgba(7, 10, 15, 0.45);
+}
+
+*::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(7, 10, 15, 0.45);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(247, 241, 230, 0.24);
+  border: 2px solid rgba(7, 10, 15, 0.45);
+  border-radius: 999px;
+}
+
+@layer base {
+  button,
+  a,
+  input,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  ::selection {
+    background: rgba(84, 214, 207, 0.28);
+    color: #fff;
+  }
+}
+
+@layer components {
+  .app-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    overflow: hidden;
+    background:
+      linear-gradient(180deg, rgba(7, 10, 15, 0.2), #070a0f 72%),
+      linear-gradient(135deg, rgba(247, 241, 230, 0.055), transparent 34%),
+      linear-gradient(315deg, rgba(84, 214, 207, 0.075), transparent 28%), #070a0f;
+  }
+
+  .app-canvas::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(247, 241, 230, 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(247, 241, 230, 0.055) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.78), transparent 78%);
+  }
+
+  .app-canvas::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(
+        105deg,
+        transparent 0 18%,
+        rgba(200, 161, 90, 0.08) 18.1% 18.4%,
+        transparent 18.5% 100%
+      ),
+      repeating-linear-gradient(90deg, transparent 0 30px, rgba(247, 241, 230, 0.025) 30px 31px);
+  }
+
+  .glass-panel {
+    border: 1px solid rgba(247, 241, 230, 0.12);
+    background:
+      linear-gradient(145deg, rgba(247, 241, 230, 0.08), rgba(247, 241, 230, 0.035)),
+      rgba(13, 19, 28, 0.72);
+    box-shadow: 0 20px 70px rgba(0, 0, 0, 0.32);
+    backdrop-filter: blur(18px);
+  }
+
+  .ticket-edge {
+    background-image:
+      radial-gradient(
+        circle at left 18px,
+        transparent 0 9px,
+        rgba(247, 241, 230, 0.12) 9.5px 10px,
+        transparent 10.5px
+      ),
+      radial-gradient(
+        circle at right 18px,
+        transparent 0 9px,
+        rgba(247, 241, 230, 0.12) 9.5px 10px,
+        transparent 10.5px
+      );
+    background-size: 100% 36px;
+  }
 }

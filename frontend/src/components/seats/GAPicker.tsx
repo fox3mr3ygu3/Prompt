@@ -1,3 +1,7 @@
+import { Minus, Plus, Ticket } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Button, Panel } from "@/components/ui";
+
 /** Quantity stepper for general-admission events (no seat map). */
 export function GAPicker({
   tierPriceCents,
@@ -16,13 +20,24 @@ export function GAPicker({
 }) {
   const clamp = (n: number) => Math.max(min, Math.min(max, n));
   return (
-    <div className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
-      <h2 className="text-lg font-semibold">General admission</h2>
-      <p className="mt-1 text-sm text-slate-400">
-        Pick a quantity ({min}–{max}). Seats are not assigned for this event.
-      </p>
-      <div className="mt-4 flex items-center gap-3">
-        <QtyButton onClick={() => onChange(clamp(qty - 1))} symbol="−" />
+    <Panel className="mt-6 p-6">
+      <div className="flex items-start gap-3">
+        <span className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-aqua/10 text-aqua">
+          <Ticket aria-hidden className="h-5 w-5" />
+        </span>
+        <div>
+          <h2 className="font-display text-2xl font-bold text-ivory">General admission</h2>
+          <p className="mt-1 text-sm text-ivory-muted">
+            Pick a quantity ({min}–{max}). Seats are not assigned for this event.
+          </p>
+        </div>
+      </div>
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <QtyButton
+          onClick={() => onChange(clamp(qty - 1))}
+          icon={Minus}
+          label="Decrease quantity"
+        />
         <input
           type="number"
           min={min}
@@ -32,28 +47,38 @@ export function GAPicker({
             const n = parseInt(e.target.value || String(min), 10);
             onChange(Number.isFinite(n) ? clamp(n) : min);
           }}
-          className="h-10 w-20 rounded-lg border border-slate-800 bg-slate-900 text-center text-white"
+          className="h-12 w-24 rounded-xl border border-ivory/12 bg-ink-2 text-center font-display text-xl font-bold text-ivory outline-none focus:border-aqua/70"
         />
-        <QtyButton onClick={() => onChange(clamp(qty + 1))} symbol="+" />
-        <div className="ml-4 text-sm text-slate-400">
+        <QtyButton onClick={() => onChange(clamp(qty + 1))} icon={Plus} label="Increase quantity" />
+        <div className="ml-0 text-sm font-semibold text-ivory-muted sm:ml-4">
           ×{" "}
-          <span className="text-white">
+          <span className="text-ivory">
             {(tierPriceCents / 100).toFixed(2)} {tierCurrency}
           </span>
         </div>
       </div>
-    </div>
+    </Panel>
   );
 }
 
-function QtyButton({ onClick, symbol }: { onClick: () => void; symbol: string }) {
+function QtyButton({
+  onClick,
+  icon: Icon,
+  label,
+}: {
+  onClick: () => void;
+  icon: LucideIcon;
+  label: string;
+}) {
   return (
-    <button
+    <Button
       type="button"
       onClick={onClick}
-      className="h-10 w-10 rounded-lg border border-slate-800 bg-slate-900 text-xl text-white hover:border-slate-600"
+      variant="secondary"
+      className="h-12 w-12 p-0"
+      aria-label={label}
     >
-      {symbol}
-    </button>
+      <Icon aria-hidden className="h-5 w-5" />
+    </Button>
   );
 }

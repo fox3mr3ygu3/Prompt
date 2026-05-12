@@ -1,9 +1,21 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { CalendarDays, MapPin, SlidersHorizontal, Sparkles, Ticket } from "lucide-react";
 import { api, CategoryTreeNode, EventListItem } from "@/lib/api";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { fmtMoney } from "@/lib/format";
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  MetricCard,
+  PageShell,
+  Panel,
+  SearchInput,
+  TextInput,
+} from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, {
@@ -26,7 +38,6 @@ export function Browse() {
     staleTime: 5 * 60_000,
   });
 
-  // Active category slug for the API filter — sub if picked, else top.
   const activeCat = subCat ?? topCat;
 
   const { data, isLoading, error } = useQuery({
@@ -47,143 +58,270 @@ export function Browse() {
     return t?.children ?? [];
   }, [topCat, tree]);
 
+  const cityCount = useMemo(() => {
+    if (!data) return 0;
+    return new Set(data.map((ev) => ev.venue_city).filter(Boolean)).size;
+  }, [data]);
+
+  const minPrice = useMemo(() => {
+    if (!data || data.length === 0) return null;
+    const cheapest = data.reduce((min, ev) => Math.min(min, ev.min_price_cents), Infinity);
+    return Number.isFinite(cheapest) ? cheapest : null;
+  }, [data]);
+
+  const featured = data?.[0] ?? null;
+
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-16 pt-10">
-      {/* Hero */}
-      <header className="mb-10">
-        <h1 className="bg-gradient-to-br from-sky-300 to-indigo-400 bg-clip-text text-4xl font-extrabold tracking-tight text-transparent sm:text-5xl">
-          Find your next event
-        </h1>
-        <p className="mt-3 max-w-2xl text-slate-400">
-          Browse conferences, concerts, sports nights and more across Tashkent. Pick
-          a seat, scan in at the door — done.
-        </p>
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search events…"
-            className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-sky-500 focus:outline-none sm:max-w-md"
-          />
-          <input
-            value={city}
-            onChange={(e) => setCity(e.target.value)}
-            placeholder="City (e.g. Tashkent)"
-            className="rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
-          />
+    <PageShell>
+      <header className="grid gap-6 py-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)] lg:items-end">
+        <div className="animate-fade-up">
+          <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-aqua/20 bg-aqua/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-aqua">
+            <Sparkles aria-hidden className="h-3.5 w-3.5" />
+            Ticketing that stays live
+          </p>
+          <h1 className="max-w-4xl font-display text-5xl font-bold leading-[0.95] tracking-normal text-ivory sm:text-6xl lg:text-7xl">
+            Find the room, pick the seat, walk in with a clean scan.
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-ivory-muted sm:text-lg">
+            Discover conferences and live programs across the city with seat maps, named tickets,
+            real-time holds, and gate-ready QR workflows.
+          </p>
         </div>
+
+        <Panel className="animate-fade-up overflow-hidden p-5 [animation-delay:90ms]">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-ivory-muted">
+                Live board
+              </div>
+              <div className="mt-2 font-display text-3xl font-bold text-ivory">
+                {data?.length ?? 0} events
+              </div>
+            </div>
+            <span className="rounded-full border border-fern/25 bg-fern/10 px-3 py-1 text-xs font-bold text-fern">
+              realtime seat holds
+            </span>
+          </div>
+          <div className="mt-6 grid grid-cols-3 gap-3">
+            <MiniStat label="Cities" value={cityCount.toLocaleString()} />
+            <MiniStat
+              label="From"
+              value={minPrice === null ? "—" : fmtMoney(minPrice, "USD", { compact: true })}
+            />
+            <MiniStat label="Mode" value="Seat / GA" />
+          </div>
+          {featured && (
+            <Link
+              to={`/events/${featured.slug}`}
+              className="mt-5 block rounded-2xl border border-ivory/10 bg-ink-2/75 p-4 transition hover:border-aqua/35 hover:bg-ink-2"
+            >
+              <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-aqua">
+                Next highlight
+              </div>
+              <div className="mt-1 line-clamp-1 font-display text-xl font-bold text-ivory">
+                {featured.title}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ivory-muted">
+                <span>{fmtDate(featured.starts_at)}</span>
+                <span>{featured.venue_city ?? "City TBA"}</span>
+                <span>{fmtMoney(featured.min_price_cents, "USD", { compact: true })}</span>
+              </div>
+            </Link>
+          )}
+        </Panel>
       </header>
 
-      {/* Top-level category chips */}
-      {tree && tree.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          <Chip
-            active={topCat === null}
-            onClick={() => {
-              setTopCat(null);
-              setSubCat(null);
-            }}
-            label="All"
-            icon="✨"
+      <Panel className="p-4 sm:p-5">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px_auto]">
+          <SearchInput
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search events, venues, tags"
+            aria-label="Search events"
           />
-          {tree.map((c) => (
+          <TextInput
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder="City"
+            aria-label="City"
+            icon={MapPin}
+          />
+          <div className="flex items-center gap-2 rounded-xl border border-ivory/12 bg-ink-2/65 px-3 text-sm font-semibold text-ivory-muted">
+            <SlidersHorizontal aria-hidden className="h-4 w-4 text-aqua" />
+            smart filters
+          </div>
+        </div>
+
+        {tree && tree.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-2">
             <Chip
-              key={c.id}
-              active={topCat === c.slug}
+              active={topCat === null}
               onClick={() => {
-                setTopCat(c.slug);
+                setTopCat(null);
                 setSubCat(null);
               }}
-              label={c.name}
-              icon={c.icon}
+              label="All"
+              icon="All"
             />
-          ))}
-        </div>
-      )}
+            {tree.map((c) => (
+              <Chip
+                key={c.id}
+                active={topCat === c.slug}
+                onClick={() => {
+                  setTopCat(c.slug);
+                  setSubCat(null);
+                }}
+                label={c.name}
+                icon={c.icon}
+              />
+            ))}
+          </div>
+        )}
 
-      {/* Sub-category chips */}
-      {subCatsForTop.length > 0 && (
-        <div className="mb-8 flex flex-wrap gap-2 border-t border-slate-800/60 pt-3">
-          <Chip
-            small
-            active={subCat === null}
-            onClick={() => setSubCat(null)}
-            label={`All ${topCat}`}
-            icon="•"
-          />
-          {subCatsForTop.map((c) => (
+        {subCatsForTop.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2 border-t border-ivory/10 pt-3">
             <Chip
-              key={c.id}
               small
-              active={subCat === c.slug}
-              onClick={() => setSubCat(c.slug)}
-              label={c.name}
-              icon={c.icon}
+              active={subCat === null}
+              onClick={() => setSubCat(null)}
+              label={`All ${topCat}`}
+              icon="All"
             />
-          ))}
-        </div>
+            {subCatsForTop.map((c) => (
+              <Chip
+                key={c.id}
+                small
+                active={subCat === c.slug}
+                onClick={() => setSubCat(c.slug)}
+                label={c.name}
+                icon={c.icon}
+              />
+            ))}
+          </div>
+        )}
+      </Panel>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <MetricCard
+          label="Seat confidence"
+          value="5 min"
+          detail="Redis-backed hold window"
+          icon={Ticket}
+          tone="aqua"
+        />
+        <MetricCard
+          label="Gate flow"
+          value="1 scan"
+          detail="Signed single-use ticket"
+          icon={CalendarDays}
+          tone="brass"
+        />
+        <MetricCard
+          label="Venue scope"
+          value={cityCount > 0 ? `${cityCount} city${cityCount === 1 ? "" : "ies"}` : "Live"}
+          detail="Search by city, tag, category"
+          icon={MapPin}
+          tone="ember"
+        />
+      </div>
+
+      {isLoading && <LoadingState label="Loading events" />}
+      {error && <ErrorState label="Failed to load events." />}
+      {data && data.length === 0 && (
+        <EmptyState
+          title="No matching events"
+          description="Try clearing the city or category filter; the catalog updates as soon as organizers publish new events."
+        />
       )}
 
-      {/* Event cards */}
-      {isLoading && <p className="mt-6 text-slate-400">Loading…</p>}
-      {error && <p className="mt-6 text-red-400">Failed to load events.</p>}
-      {data && data.length === 0 && (
-        <p className="mt-12 text-center text-slate-500">No events match those filters.</p>
-      )}
-      <div className="mt-2 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-        {data?.map((ev) => (
-          <Link
-            key={ev.id}
-            to={`/events/${ev.slug}`}
-            className="group overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/40 transition hover:border-sky-500/60 hover:bg-slate-900/70"
-          >
-            <div
-              className="h-44 w-full bg-slate-800 bg-cover bg-center"
-              style={
-                ev.cover_image_url
-                  ? { backgroundImage: `url(${ev.cover_image_url})` }
-                  : undefined
-              }
-            />
-            <div className="p-4">
-              <div className="flex items-center justify-between text-xs text-slate-400">
-                <span className="inline-flex items-center gap-1">
-                  {ev.category_icon ?? "🎫"}{" "}
-                  <span className="uppercase tracking-wide">
-                    {ev.category_name ?? "Event"}
-                  </span>
-                </span>
-                <span>{fmtDate(ev.starts_at)}</span>
-              </div>
-              <h3 className="mt-2 line-clamp-2 text-lg font-semibold text-white group-hover:text-sky-300">
-                {ev.title}
-              </h3>
-              <div className="mt-2 flex items-center justify-between text-sm">
-                <span className="text-slate-400">
-                  {ev.venue_name}
-                  {ev.venue_city ? ` · ${ev.venue_city}` : ""}
-                </span>
-                <span className="rounded-md bg-sky-500/15 px-2 py-0.5 font-medium text-sky-300">
-                  from {fmtMoney(ev.min_price_cents, "USD", { compact: true })}
-                </span>
-              </div>
-              {ev.tags.length > 0 && (
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {ev.tags.slice(0, 4).map((t) => (
-                    <span
-                      key={t}
-                      className="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300"
-                    >
-                      #{t}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </Link>
+      <div className="mt-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        {data?.map((ev, idx) => (
+          <EventCard key={ev.id} event={ev} index={idx} />
         ))}
       </div>
-    </main>
+    </PageShell>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-ivory/10 bg-ivory/[0.045] p-3">
+      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-ivory-muted">
+        {label}
+      </div>
+      <div className="mt-1 truncate font-display text-lg font-bold text-ivory">{value}</div>
+    </div>
+  );
+}
+
+function EventCard({ event, index }: { event: EventListItem; index: number }) {
+  return (
+    <Link
+      to={`/events/${event.slug}`}
+      className="group glass-panel animate-fade-up overflow-hidden rounded-2xl transition duration-300 hover:-translate-y-1 hover:border-aqua/35 hover:shadow-glow"
+      style={{ animationDelay: `${Math.min(index * 45, 240)}ms` }}
+    >
+      <div className="relative h-56 overflow-hidden bg-ink-3">
+        {event.cover_image_url ? (
+          <img
+            src={event.cover_image_url}
+            alt=""
+            className="h-full w-full object-cover transition duration-700 group-hover:scale-105"
+            loading="lazy"
+          />
+        ) : (
+          <div className="h-full w-full bg-ticket-grid bg-[length:34px_34px]" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/20 to-transparent" />
+        <div className="absolute left-4 top-4 rounded-full border border-ivory/12 bg-ink/70 px-3 py-1 text-xs font-bold text-ivory backdrop-blur">
+          {event.category_icon ?? "•"} {event.category_name ?? "Event"}
+        </div>
+        <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs font-semibold text-ivory-muted">
+              <CalendarDays aria-hidden className="h-3.5 w-3.5 text-aqua" />
+              {fmtDate(event.starts_at)}
+            </div>
+            <h3 className="mt-1 line-clamp-2 font-display text-2xl font-bold leading-tight text-ivory">
+              {event.title}
+            </h3>
+          </div>
+          <span className="shrink-0 rounded-xl bg-aqua px-3 py-2 text-sm font-black text-ink shadow-glow">
+            {fmtMoney(event.min_price_cents, "USD", { compact: true })}
+          </span>
+        </div>
+      </div>
+
+      <div className="space-y-4 p-4">
+        <div className="flex items-start justify-between gap-4 text-sm">
+          <div className="min-w-0 text-ivory-muted">
+            <div className="truncate font-semibold text-ivory">
+              {event.venue_name ?? "Venue TBA"}
+            </div>
+            <div className="mt-1 flex items-center gap-1.5">
+              <MapPin aria-hidden className="h-3.5 w-3.5 text-brass" />
+              {event.venue_city ?? "City TBA"}
+            </div>
+          </div>
+          <span className="rounded-full border border-ivory/10 bg-ivory/7 px-2.5 py-1 text-xs font-bold text-ivory-muted">
+            live
+          </span>
+        </div>
+
+        {event.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {event.tags.slice(0, 4).map((t) => (
+              <span
+                key={t}
+                className="rounded-full border border-ivory/10 bg-ink-2 px-2 py-1 text-[11px] font-semibold text-ivory-muted"
+              >
+                #{t}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </Link>
   );
 }
 
@@ -200,18 +338,19 @@ function Chip({
   icon: string;
   small?: boolean;
 }) {
-  const base = small ? "px-2.5 py-1 text-xs" : "px-3.5 py-1.5 text-sm";
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-1.5 rounded-full border transition ${base} ${
+      className={cn(
+        "inline-flex min-h-9 items-center gap-2 rounded-full border font-bold transition",
+        small ? "px-3 py-1 text-xs" : "px-3.5 py-1.5 text-sm",
         active
-          ? "border-sky-500/80 bg-sky-500/15 text-sky-200"
-          : "border-slate-800 bg-slate-900/40 text-slate-300 hover:border-slate-600 hover:text-white"
-      }`}
+          ? "border-aqua/55 bg-aqua/14 text-aqua"
+          : "border-ivory/12 bg-ivory/6 text-ivory-muted hover:border-ivory/24 hover:text-ivory",
+      )}
     >
-      <span>{icon}</span>
+      <span className="max-w-[8rem] truncate">{icon}</span>
       <span>{label}</span>
     </button>
   );

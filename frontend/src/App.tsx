@@ -17,27 +17,21 @@ import { GateScan } from "@/pages/GateScan";
 
 function Private({ children }: { children: JSX.Element }) {
   const { me, loading } = useAuth();
-  if (loading) return <p className="p-8 text-slate-500">Loading…</p>;
+  if (loading) return <p className="p-8 text-ivory-muted">Loading…</p>;
   if (!me) return <Navigate to="/login" replace />;
   return children;
 }
 
-function RoleGuard({
-  roles,
-  children,
-}: {
-  roles: string[];
-  children: JSX.Element;
-}) {
+function RoleGuard({ roles, children }: { roles: string[]; children: JSX.Element }) {
   const { me, loading } = useAuth();
-  if (loading) return <p className="p-8 text-slate-500">Loading…</p>;
+  if (loading) return <p className="p-8 text-ivory-muted">Loading…</p>;
   if (!me) return <Navigate to="/login" replace />;
   // Admin always passes — mirrors backend RBAC semantics.
   if (me.role !== "admin" && !roles.includes(me.role)) {
     return (
-      <main className="mx-auto max-w-md px-4 py-16 text-slate-100">
-        <h1 className="text-2xl font-bold">Forbidden</h1>
-        <p className="mt-2 text-slate-400">
+      <main className="mx-auto max-w-md px-4 py-16 text-ivory">
+        <h1 className="font-display text-3xl font-bold">Forbidden</h1>
+        <p className="mt-2 text-ivory-muted">
           This page is restricted to {roles.join(", ")} accounts.
         </p>
       </main>
@@ -48,7 +42,8 @@ function RoleGuard({
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen overflow-x-hidden bg-ink text-ivory">
+      <div className="app-canvas" aria-hidden />
       <Nav />
       <Routes>
         <Route path="/" element={<Browse />} />

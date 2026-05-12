@@ -1,8 +1,10 @@
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { ArrowRight, LockKeyhole, Mail, UserRound } from "lucide-react";
 import { ApiErr, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { useDocumentTitle } from "@/lib/use-document-title";
+import { Button, PageShell, Panel, TextInput } from "@/components/ui";
 
 /** Sign-up form. POSTs to /api/auth/register, then auto-logs-in via the
  *  same /auth/token endpoint so the new user lands signed-in on /. */
@@ -42,56 +44,57 @@ export function Register() {
   }
 
   return (
-    <main className="mx-auto max-w-sm px-4 py-16 text-slate-100">
-      <h1 className="bg-gradient-to-br from-sky-300 to-indigo-400 bg-clip-text text-3xl font-extrabold text-transparent">
-        Create your account
-      </h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Buy tickets, manage your bookings, and scan-in at the door.
-      </p>
-      <form onSubmit={onSubmit} className="mt-6 space-y-3">
-        <input
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-          required
-          className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3.5 py-2.5 text-white placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
-          placeholder="Full name"
-          autoComplete="name"
-        />
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3.5 py-2.5 text-white placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
-          placeholder="you@example.com"
-          autoComplete="email"
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={8}
-          className="w-full rounded-lg border border-slate-800 bg-slate-900/70 px-3.5 py-2.5 text-white placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
-          placeholder="Password (min 8 chars)"
-          autoComplete="new-password"
-        />
-        <button
-          type="submit"
-          disabled={busy}
-          className="w-full rounded-lg bg-sky-500 px-3 py-2.5 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700"
-        >
-          {busy ? "Creating account…" : "Create account"}
-        </button>
-        {err && <p className="text-sm text-red-400">{err}</p>}
-      </form>
-      <p className="mt-6 text-sm text-slate-400">
-        Already have an account?{" "}
-        <Link to="/login" className="font-medium text-sky-300 hover:text-sky-200">
-          Sign in
-        </Link>
-      </p>
-    </main>
+    <PageShell narrow className="grid min-h-[calc(100vh-90px)] place-items-center">
+      <Panel className="w-full max-w-md p-6 sm:p-7">
+        <div className="mb-6">
+          <p className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-aqua">
+            attendee access
+          </p>
+          <h1 className="font-display text-4xl font-bold text-ivory">Create your account</h1>
+          <p className="mt-2 text-sm leading-6 text-ivory-muted">
+            Buy tickets, manage your bookings, and scan in at the door.
+          </p>
+        </div>
+        <form onSubmit={onSubmit} className="space-y-3">
+          <TextInput
+            value={fullName}
+            onChange={(e) => setFullName(e.target.value)}
+            required
+            placeholder="Full name"
+            autoComplete="name"
+            icon={UserRound}
+          />
+          <TextInput
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            placeholder="you@example.com"
+            autoComplete="email"
+            icon={Mail}
+          />
+          <TextInput
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={8}
+            placeholder="Password (min 8 chars)"
+            autoComplete="new-password"
+            icon={LockKeyhole}
+          />
+          <Button type="submit" disabled={busy} className="w-full" icon={ArrowRight}>
+            {busy ? "Creating account…" : "Create account"}
+          </Button>
+          {err && <p className="text-sm font-semibold text-red-200">{err}</p>}
+        </form>
+        <p className="mt-6 text-sm text-ivory-muted">
+          Already have an account?{" "}
+          <Link to="/login" className="font-bold text-aqua hover:text-[#7ce4de]">
+            Sign in
+          </Link>
+        </p>
+      </Panel>
+    </PageShell>
   );
 }

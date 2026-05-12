@@ -1,6 +1,17 @@
 import { FormEvent, useState } from "react";
+import { ScanLine, ShieldAlert, ShieldCheck } from "lucide-react";
 import { api, ScanResult } from "@/lib/api";
 import { useDocumentTitle } from "@/lib/use-document-title";
+import {
+  Button,
+  Field,
+  PageHeader,
+  PageShell,
+  Panel,
+  StatusPill,
+  TextareaInput,
+} from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 export function GateScan() {
   useDocumentTitle("Gate scan");
@@ -24,43 +35,71 @@ export function GateScan() {
     }
   }
 
-  const colour =
-    last?.result === "ok"
-      ? "border-emerald-500 text-emerald-400"
-      : last?.result === "replay"
-        ? "border-amber-500 text-amber-300"
-        : last
-          ? "border-red-500 text-red-400"
-          : "border-slate-800";
-
   return (
-    <main className="mx-auto max-w-md px-4 py-12 text-slate-100">
-      <h1 className="text-2xl font-bold">Gate scan</h1>
-      <form onSubmit={onSubmit} className="mt-6 space-y-3">
-        <textarea
-          value={payload}
-          onChange={(e) => setPayload(e.target.value)}
-          rows={4}
-          placeholder="Paste QR payload (JWT)"
-          className="w-full rounded bg-slate-800 p-3 font-mono text-xs"
-        />
-        <button
-          type="submit"
-          disabled={busy || !payload}
-          className="w-full rounded bg-sky-500 px-3 py-2 font-semibold text-white disabled:bg-slate-700"
-        >
-          {busy ? "Scanning…" : "Scan"}
-        </button>
-      </form>
-      {last && (
-        <div className={`mt-6 rounded border p-4 ${colour}`}>
-          <div className="font-bold uppercase">{last.result}</div>
-          <div className="mt-1 text-sm">{last.detail}</div>
-          {last.ticket_id && (
-            <div className="mt-2 font-mono text-xs">ticket {last.ticket_id}</div>
-          )}
+    <PageShell narrow>
+      <PageHeader
+        eyebrow="gate mode"
+        title="Gate scan"
+        description="Paste the QR payload from a ticket. A valid ticket flips to used exactly once."
+      />
+
+      <Panel className="overflow-hidden p-6">
+        <div className="grid gap-6 lg:grid-cols-[1fr_220px]">
+          <form onSubmit={onSubmit} className="space-y-4">
+            <TextareaInput
+              value={payload}
+              onChange={(e) => setPayload(e.target.value)}
+              rows={6}
+              label="QR payload"
+              placeholder="Paste QR payload (JWT)"
+              textareaClassName="font-mono text-xs"
+            />
+            <Button type="submit" disabled={busy || !payload} className="w-full" icon={ScanLine}>
+              {busy ? "Scanning…" : "Scan ticket"}
+            </Button>
+          </form>
+
+          <div className="relative flex min-h-56 items-center justify-center rounded-2xl border border-ivory/12 bg-ink-2/72">
+            <div className="absolute inset-4 rounded-xl border border-aqua/25" />
+            <div className="absolute inset-x-8 top-1/2 h-px bg-aqua shadow-glow animate-soft-pulse" />
+            <ScanLine aria-hidden className="h-20 w-20 text-aqua/70" />
+          </div>
         </div>
+      </Panel>
+
+      {last && <ScanResultCard result={last} />}
+    </PageShell>
+  );
+}
+
+function ScanResultCard({ result }: { result: ScanResult }) {
+  const success = result.result === "ok";
+  return (
+    <Panel
+      className={cn(
+        "mt-6 p-5",
+        success
+          ? "border-emerald-300/24 bg-emerald-400/10"
+          : result.result === "replay"
+            ? "border-amber-300/24 bg-amber-400/10"
+            : "border-red-300/24 bg-red-400/10",
       )}
-    </main>
+    >
+      <div className="flex items-start gap-3">
+        {success ? (
+          <ShieldCheck aria-hidden className="mt-1 h-6 w-6 text-emerald-200" />
+        ) : (
+          <ShieldAlert aria-hidden className="mt-1 h-6 w-6 text-amber-200" />
+        )}
+        <div className="min-w-0 flex-1">
+          <StatusPill status={result.result}>{result.result}</StatusPill>
+          <p className="mt-3 text-sm font-semibold text-ivory">{result.detail}</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <Field label="Ticket" value={result.ticket_id ?? "—"} mono />
+            <Field label="Event" value={result.event_id ?? "—"} mono />
+          </div>
+        </div>
+      </div>
+    </Panel>
   );
 }

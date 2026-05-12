@@ -1,15 +1,24 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import {
-  ApiErr,
-  EventProposal,
-  EventProposalCreate,
-  OrgEvent,
-  api,
-} from "@/lib/api";
+import { ArrowRight, CalendarDays, CircleDollarSign, Plus, Send, Users, X } from "lucide-react";
+import { ApiErr, EventProposal, EventProposalCreate, OrgEvent, api } from "@/lib/api";
 import { fmtMoney } from "@/lib/format";
 import { useDocumentTitle } from "@/lib/use-document-title";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Field,
+  LoadingState,
+  MetricCard,
+  PageHeader,
+  PageShell,
+  Panel,
+  StatusPill,
+  TextInput,
+  TextareaInput,
+} from "@/components/ui";
 
 function fmtWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -19,20 +28,6 @@ function fmtWhen(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-function statusBadge(status: string): string {
-  switch (status) {
-    case "approved":
-    case "published":
-      return "bg-emerald-500/15 text-emerald-300";
-    case "pending":
-      return "bg-amber-500/15 text-amber-300";
-    case "rejected":
-      return "bg-red-500/15 text-red-300";
-    default:
-      return "bg-slate-500/15 text-slate-300";
-  }
 }
 
 export function OrgEvents() {
@@ -48,165 +43,172 @@ export function OrgEvents() {
 
   const proposalsQ = useQuery({
     queryKey: ["org-proposals"],
-    queryFn: async () =>
-      (await api.get<EventProposal[]>("/org/proposals")).data,
+    queryFn: async () => (await api.get<EventProposal[]>("/org/proposals")).data,
     refetchInterval: 5_000,
   });
 
-  if (isLoading) return <p className="p-8 text-slate-400">Loading…</p>;
-  if (error) return <p className="p-8 text-red-400">Failed to load events.</p>;
+  if (isLoading) return <LoadingState label="Loading organizer events" />;
+  if (error) return <ErrorState label="Failed to load events." />;
 
   const totalAttendees = data?.reduce((acc, e) => acc + e.attendee_count, 0) ?? 0;
   const totalGross = data?.reduce((acc, e) => acc + e.gross_cents, 0) ?? 0;
   const ccy = data?.[0]?.currency ?? "USD";
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8 text-slate-100">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">My events</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Live counts — attendees and gross are recomputed from the tickets
-            table on every request.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setShowForm(true)}
-          className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400"
-        >
-          + Add event
-        </button>
+    <PageShell>
+      <PageHeader
+        eyebrow="organizer console"
+        title="My events"
+        description="Live ticket counts, gross revenue, proposals, and attendee access from one operational dashboard."
+        action={
+          <Button type="button" onClick={() => setShowForm(true)} icon={Plus}>
+            Add event
+          </Button>
+        }
+      />
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <MetricCard
+          label="Events"
+          value={(data?.length ?? 0).toLocaleString()}
+          icon={CalendarDays}
+        />
+        <MetricCard
+          label="Attendees"
+          value={totalAttendees.toLocaleString()}
+          icon={Users}
+          tone="fern"
+        />
+        <MetricCard
+          label="Gross"
+          value={fmtMoney(totalGross, ccy)}
+          icon={CircleDollarSign}
+          tone="brass"
+        />
       </div>
 
-      <div className="mt-6 grid grid-cols-3 gap-3">
-        <Kpi label="Events" value={(data?.length ?? 0).toLocaleString()} />
-        <Kpi label="Attendees" value={totalAttendees.toLocaleString()} />
-        <Kpi label="Gross" value={fmtMoney(totalGross, ccy)} />
-      </div>
-
-      {data && data.length === 0 && (
-        <p className="mt-12 text-center text-slate-500">
-          No events yet — click “Add event” to submit one for admin approval.
-        </p>
+      {data && data.length === 0 ? (
+        <EmptyState
+          title="No live events yet"
+          description="Submit a proposal and approved events become visible to attendees."
+          action={
+            <Button type="button" onClick={() => setShowForm(true)} icon={Plus}>
+              Submit proposal
+            </Button>
+          }
+        />
+      ) : (
+        <ul className="mt-7 grid gap-4">
+          {data?.map((event) => (
+            <LiveEventCard key={event.id} event={event} />
+          ))}
+        </ul>
       )}
 
-      <ul className="mt-8 space-y-3">
-        {data?.map((e) => (
-          <li
-            key={e.id}
-            className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0">
-                <Link
-                  to={`/org/events/${e.slug}/attendees`}
-                  className="truncate text-lg font-semibold text-white hover:text-sky-300"
-                >
-                  {e.title}
-                </Link>
-                <div className="mt-1 text-xs text-slate-400">
-                  {fmtWhen(e.starts_at)} · {e.venue_name} · {e.room_name}
-                </div>
-              </div>
-              <span
-                className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(e.status)}`}
-              >
-                {e.status}
-              </span>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Field
-                label="Attendees"
-                value={`${e.attendee_count} / ${e.capacity}`}
-              />
-              <Field label="Scanned in" value={e.scanned_count.toLocaleString()} />
-              <Field
-                label="Gross"
-                value={fmtMoney(e.gross_cents, e.currency)}
-              />
-              <Link
-                to={`/org/events/${e.slug}/attendees`}
-                className="self-end rounded-lg bg-sky-500/15 px-3 py-1.5 text-center text-sm font-semibold text-sky-300 hover:bg-sky-500/25"
-              >
-                View attendees →
-              </Link>
-            </div>
-          </li>
-        ))}
-      </ul>
-
       <section className="mt-12">
-        <h2 className="text-lg font-bold">My proposals</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Submitted to the admin for approval. Approved proposals turn into
-          live events visible to attendees.
-        </p>
-        {proposalsQ.isLoading && (
-          <p className="mt-4 text-sm text-slate-400">Loading…</p>
-        )}
-        {proposalsQ.data && proposalsQ.data.length === 0 && (
-          <p className="mt-4 text-sm text-slate-500">
-            No proposals yet.
+        <div className="mb-4">
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-aqua">approval queue</p>
+          <h2 className="mt-1 font-display text-3xl font-bold text-ivory">My proposals</h2>
+          <p className="mt-2 text-sm text-ivory-muted">
+            Approved proposals turn into live events visible to attendees.
           </p>
+        </div>
+        {proposalsQ.isLoading && <LoadingState label="Loading proposals" />}
+        {proposalsQ.data && proposalsQ.data.length === 0 && (
+          <EmptyState
+            title="No proposals yet"
+            description="Draft an event proposal when you are ready."
+          />
         )}
-        <ul className="mt-4 space-y-3">
-          {proposalsQ.data?.map((p) => (
-            <li
-              key={p.id}
-              className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate text-base font-semibold text-white">
-                    {p.title}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-400">
-                    {fmtWhen(p.starts_at)} · {p.venue_name} · {p.city} ·{" "}
-                    {p.seats} seats
-                  </div>
-                </div>
-                <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusBadge(p.status)}`}
-                >
-                  {p.status}
-                </span>
-              </div>
-              {p.status === "rejected" && p.reject_reason && (
-                <p className="mt-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
-                  <span className="font-semibold">Reason:</span>{" "}
-                  {p.reject_reason}
-                </p>
-              )}
-            </li>
+        <ul className="space-y-3">
+          {proposalsQ.data?.map((proposal) => (
+            <ProposalCard key={proposal.id} proposal={proposal} compact />
           ))}
         </ul>
       </section>
 
       {showForm && <AddEventModal onClose={() => setShowForm(false)} />}
-    </main>
+    </PageShell>
   );
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function LiveEventCard({ event }: { event: OrgEvent }) {
+  const capacityPct =
+    event.capacity > 0
+      ? Math.min(100, Math.round((event.attendee_count / event.capacity) * 100))
+      : 0;
   return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-      <div className="text-[11px] uppercase tracking-wider text-slate-500">
-        {label}
-      </div>
-      <div className="mt-1 text-2xl font-bold text-white">{value}</div>
-    </div>
+    <li>
+      <Panel className="p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <Link
+              to={`/org/events/${event.slug}/attendees`}
+              className="font-display text-2xl font-bold text-ivory hover:text-aqua"
+            >
+              {event.title}
+            </Link>
+            <div className="mt-1 text-sm font-semibold text-ivory-muted">
+              {fmtWhen(event.starts_at)} · {event.venue_name} · {event.room_name}
+            </div>
+          </div>
+          <StatusPill status={event.status}>{event.status}</StatusPill>
+        </div>
+        <div className="mt-5 grid gap-4 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">
+          <Field label="Attendees" value={`${event.attendee_count} / ${event.capacity}`} />
+          <Field label="Scanned in" value={event.scanned_count.toLocaleString()} />
+          <Field label="Gross" value={fmtMoney(event.gross_cents, event.currency)} />
+          <Link
+            to={`/org/events/${event.slug}/attendees`}
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-aqua/20 bg-aqua/10 px-3 py-2 text-sm font-bold text-aqua transition hover:bg-aqua/16"
+          >
+            View attendees
+            <ArrowRight aria-hidden className="h-4 w-4" />
+          </Link>
+        </div>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-ivory/8">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-aqua to-brass"
+            style={{ width: `${capacityPct}%` }}
+          />
+        </div>
+      </Panel>
+    </li>
   );
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+function ProposalCard({
+  proposal,
+  compact = false,
+}: {
+  proposal: EventProposal;
+  compact?: boolean;
+}) {
   return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wider text-slate-500">
-        {label}
-      </div>
-      <div className="mt-0.5 text-sm text-white">{value}</div>
-    </div>
+    <li>
+      <Panel className="p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="truncate font-display text-xl font-bold text-ivory">
+              {proposal.title}
+            </div>
+            <div className="mt-1 text-xs font-semibold text-ivory-muted">
+              {fmtWhen(proposal.starts_at)} · {proposal.venue_name} · {proposal.city} ·{" "}
+              {proposal.seats} seats
+            </div>
+          </div>
+          <StatusPill status={proposal.status}>{proposal.status}</StatusPill>
+        </div>
+        {!compact && proposal.description && (
+          <p className="mt-3 text-sm leading-6 text-ivory-muted">{proposal.description}</p>
+        )}
+        {proposal.status === "rejected" && proposal.reject_reason && (
+          <p className="mt-3 rounded-xl border border-red-300/24 bg-red-400/12 px-3 py-2 text-sm font-semibold text-red-100">
+            Reason: {proposal.reject_reason}
+          </p>
+        )}
+      </Panel>
+    </li>
   );
 }
 
@@ -240,7 +242,7 @@ function AddEventModal({ onClose }: { onClose: () => void }) {
     },
   });
 
-  function handleSubmit(ev: React.FormEvent) {
+  function handleSubmit(ev: FormEvent) {
     ev.preventDefault();
     setErrMsg(null);
 
@@ -280,224 +282,136 @@ function AddEventModal({ onClose }: { onClose: () => void }) {
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/82 p-4 backdrop-blur"
       onClick={onClose}
     >
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-800 bg-slate-900 p-6 text-slate-100 shadow-2xl"
+        className="glass-panel max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-[1.75rem] p-6 text-ivory shadow-2xl"
       >
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold">Add event</h2>
-            <p className="mt-1 text-xs text-slate-400">
-              Submitted for admin approval. Once approved, it goes live for
-              attendees with the seat count you set here.
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-aqua">new proposal</p>
+            <h2 className="mt-1 font-display text-3xl font-bold">Add event</h2>
+            <p className="mt-2 text-sm leading-6 text-ivory-muted">
+              Submitted for admin approval. Once approved, it goes live with the seat count and
+              price you set here.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-white"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-ivory/12 text-ivory-muted transition hover:bg-ivory/8 hover:text-ivory"
             aria-label="Close"
           >
-            ×
+            <X aria-hidden className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <TextInput
             label="Title *"
             value={title}
-            onChange={setTitle}
+            onChange={(e) => setTitle(e.target.value)}
             placeholder="e.g. PyConf Tashkent 2026"
             required
           />
-          <Input
+          <TextInput
             label="Category slug"
             value={categorySlug}
-            onChange={setCategorySlug}
+            onChange={(e) => setCategorySlug(e.target.value)}
             placeholder="e.g. tech, music, sports"
           />
-          <Input
+          <TextInput
             label="City *"
             value={city}
-            onChange={setCity}
+            onChange={(e) => setCity(e.target.value)}
             placeholder="e.g. Tashkent"
             required
           />
-          <Input
+          <TextInput
             label="Venue name *"
             value={venueName}
-            onChange={setVenueName}
+            onChange={(e) => setVenueName(e.target.value)}
             placeholder="e.g. Inha Auditorium"
             required
           />
-          <Input
-            label="Tags (comma-separated)"
+          <TextInput
+            label="Tags"
             value={tags}
-            onChange={setTags}
+            onChange={(e) => setTags(e.target.value)}
             placeholder="python, backend, db"
           />
-          <Input
+          <TextInput
             label="Cover image URL"
             value={coverUrl}
-            onChange={setCoverUrl}
-            placeholder="https://…"
+            onChange={(e) => setCoverUrl(e.target.value)}
+            placeholder="https://..."
           />
-          <NumberInput
+          <TextInput
             label="Number of seats *"
+            type="number"
             value={seats}
-            onChange={setSeats}
             min={1}
             max={100000}
+            onChange={(e) => setSeats(Number(e.target.value))}
+            required
           />
-          <NumberInput
+          <TextInput
             label="Price (cents) *"
+            type="number"
             value={priceCents}
-            onChange={setPriceCents}
             min={0}
+            onChange={(e) => setPriceCents(Number(e.target.value))}
+            required
           />
-          <Input
+          <TextInput
             label="Currency"
             value={currency}
-            onChange={setCurrency}
+            onChange={(e) => setCurrency(e.target.value)}
             placeholder="USD"
           />
-          <DateTimeInput
+          <TextInput
             label="Starts at *"
+            type="datetime-local"
             value={startsAt}
-            onChange={setStartsAt}
+            onChange={(e) => setStartsAt(e.target.value)}
+            required
           />
-          <DateTimeInput
+          <TextInput
             label="Ends at *"
+            type="datetime-local"
             value={endsAt}
-            onChange={setEndsAt}
+            onChange={(e) => setEndsAt(e.target.value)}
+            required
           />
         </div>
 
-        <label className="mt-4 block">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Description
-          </span>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={3}
-            className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
-            placeholder="What is this event about?"
-          />
-        </label>
+        <TextareaInput
+          label="Description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={4}
+          className="mt-4"
+          placeholder="What is this event about?"
+        />
 
         {errMsg && (
-          <p className="mt-4 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+          <p className="mt-4 rounded-xl border border-red-300/24 bg-red-400/12 px-3 py-2 text-sm font-semibold text-red-100">
             {errMsg}
           </p>
         )}
 
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800"
-          >
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <Button type="button" onClick={onClose} variant="secondary">
             Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={submit.isPending}
-            className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700"
-          >
+          </Button>
+          <Button type="submit" disabled={submit.isPending} icon={Send}>
             {submit.isPending ? "Submitting…" : "Submit for approval"}
-          </button>
+          </Button>
         </div>
       </form>
     </div>
-  );
-}
-
-function Input({
-  label,
-  value,
-  onChange,
-  placeholder,
-  required,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-  required?: boolean;
-}) {
-  return (
-    <label className="block">
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-        {label}
-      </span>
-      <input
-        type="text"
-        value={value}
-        required={required}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
-      />
-    </label>
-  );
-}
-
-function NumberInput({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  min?: number;
-  max?: number;
-}) {
-  return (
-    <label className="block">
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-        {label}
-      </span>
-      <input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
-      />
-    </label>
-  );
-}
-
-function DateTimeInput({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <label className="block">
-      <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-        {label}
-      </span>
-      <input
-        type="datetime-local"
-        value={value}
-        required
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus:border-sky-500 focus:outline-none"
-      />
-    </label>
   );
 }

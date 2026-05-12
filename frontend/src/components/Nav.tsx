@@ -1,5 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
+import {
+  BarChart3,
+  ChevronDown,
+  LayoutGrid,
+  LogOut,
+  Menu,
+  ScanLine,
+  ShieldCheck,
+  Ticket,
+  User,
+  X,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Button, LinkButton } from "@/components/ui";
+import { cn } from "@/lib/cn";
 import { useAuth } from "@/lib/auth-context";
 import type { Me } from "@/lib/auth-context";
 
@@ -8,9 +23,6 @@ export function Nav() {
   const loc = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  // Close the mobile sheet whenever the route changes — feels broken
-  // otherwise on phones (you tap a link, the underlying page swaps in,
-  // but the menu sheet stays up).
   useEffect(() => {
     setMobileOpen(false);
   }, [loc.pathname]);
@@ -18,26 +30,13 @@ export function Nav() {
   const primary = primaryLinksFor(me);
 
   return (
-    <nav className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">
-      <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
+    <nav className="sticky top-0 z-40 border-b border-ivory/10 bg-ink/78 backdrop-blur-2xl">
+      <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6 lg:px-8">
         <Brand />
 
         <div className="hidden flex-1 items-center justify-center gap-1 md:flex">
           {primary.map((l) => (
-            <NavLink
-              key={l.to}
-              to={l.to}
-              end={l.end}
-              className={({ isActive }) =>
-                `rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                  isActive
-                    ? "bg-white/10 text-white"
-                    : "text-slate-300 hover:bg-white/5 hover:text-white"
-                }`
-              }
-            >
-              {l.label}
-            </NavLink>
+            <PrimaryNavItem key={l.to} item={l} />
           ))}
         </div>
 
@@ -46,18 +45,12 @@ export function Nav() {
             <UserMenu me={me} onSignOut={logout} />
           ) : (
             <>
-              <NavLink
-                to="/login"
-                className="rounded-full px-3 py-1.5 text-sm font-medium text-slate-300 hover:text-white"
-              >
+              <LinkButton to="/login" variant="ghost" size="sm">
                 Sign in
-              </NavLink>
-              <NavLink
-                to="/register"
-                className="rounded-full bg-sky-500 px-3.5 py-1.5 text-sm font-semibold text-white shadow-[0_2px_12px_rgba(56,189,248,0.35)] transition hover:bg-sky-400"
-              >
+              </LinkButton>
+              <LinkButton to="/register" size="sm" icon={Ticket}>
                 Get started
-              </NavLink>
+              </LinkButton>
             </>
           )}
           <button
@@ -65,31 +58,22 @@ export function Nav() {
             aria-label="Toggle menu"
             aria-expanded={mobileOpen}
             onClick={() => setMobileOpen((v) => !v)}
-            className="ml-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 text-slate-200 hover:bg-white/5 md:hidden"
+            className="ml-1 inline-flex h-10 w-10 items-center justify-center rounded-xl border border-ivory/12 bg-ivory/6 text-ivory transition hover:bg-ivory/10 md:hidden"
           >
-            <BurgerIcon open={mobileOpen} />
+            {mobileOpen ? (
+              <X aria-hidden className="h-5 w-5" />
+            ) : (
+              <Menu aria-hidden className="h-5 w-5" />
+            )}
           </button>
         </div>
       </div>
 
       {mobileOpen && (
-        <div className="border-t border-white/10 bg-slate-950/95 px-4 py-3 md:hidden">
+        <div className="border-t border-ivory/10 bg-ink/96 px-4 py-3 shadow-2xl md:hidden">
           <div className="flex flex-col gap-1">
             {primary.map((l) => (
-              <NavLink
-                key={l.to}
-                to={l.to}
-                end={l.end}
-                className={({ isActive }) =>
-                  `rounded-lg px-3 py-2 text-sm font-medium ${
-                    isActive
-                      ? "bg-white/10 text-white"
-                      : "text-slate-300 hover:bg-white/5 hover:text-white"
-                  }`
-                }
-              >
-                {l.label}
-              </NavLink>
+              <PrimaryNavItem key={l.to} item={l} mobile />
             ))}
           </div>
         </div>
@@ -100,41 +84,42 @@ export function Nav() {
 
 function Brand() {
   return (
-    <Link to="/" className="flex shrink-0 items-center gap-2">
-      <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-sky-400 via-indigo-500 to-violet-500 text-base font-black text-white shadow-[0_4px_20px_rgba(99,102,241,0.45)]">
-        q
+    <Link to="/" className="flex shrink-0 items-center gap-3">
+      <span className="relative inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-aqua/30 bg-aqua/12 text-sm font-black text-aqua shadow-glow">
+        <span className="absolute inset-x-1 top-1 h-px bg-aqua/60" />
+        qc
       </span>
-      <span className="text-base font-bold tracking-tight text-white">
-        quick<span className="text-sky-400">·</span>conf
+      <span className="leading-none">
+        <span className="block font-display text-lg font-bold tracking-normal text-ivory">
+          quick-conf
+        </span>
+        <span className="hidden text-[10px] font-bold uppercase tracking-[0.26em] text-ivory-muted sm:block">
+          live ticket ops
+        </span>
       </span>
     </Link>
   );
 }
 
-function BurgerIcon({ open }: { open: boolean }) {
+function PrimaryNavItem({ item, mobile = false }: { item: NavLinkSpec; mobile?: boolean }) {
+  const Icon = item.icon;
   return (
-    <svg
-      width="18"
-      height="18"
-      viewBox="0 0 18 18"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
+    <NavLink
+      to={item.to}
+      end={item.end}
+      className={({ isActive }) =>
+        cn(
+          "inline-flex items-center gap-2 rounded-xl text-sm font-bold transition",
+          mobile ? "px-3 py-2.5" : "px-3 py-2",
+          isActive
+            ? "bg-ivory text-ink shadow-brass"
+            : "text-ivory-muted hover:bg-ivory/8 hover:text-ivory",
+        )
+      }
     >
-      {open ? (
-        <>
-          <line x1="4" y1="4" x2="14" y2="14" />
-          <line x1="14" y1="4" x2="4" y2="14" />
-        </>
-      ) : (
-        <>
-          <line x1="3" y1="5" x2="15" y2="5" />
-          <line x1="3" y1="9" x2="15" y2="9" />
-          <line x1="3" y1="13" x2="15" y2="13" />
-        </>
-      )}
-    </svg>
+      {Icon && <Icon aria-hidden className="h-4 w-4" />}
+      {item.label}
+    </NavLink>
   );
 }
 
@@ -168,96 +153,88 @@ function UserMenu({ me, onSignOut }: { me: Me; onSignOut: () => void }) {
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-1.5 py-1 pr-3 text-sm text-slate-200 transition hover:bg-white/10"
+        className="flex items-center gap-2 rounded-2xl border border-ivory/12 bg-ivory/7 px-1.5 py-1 pr-3 text-sm font-semibold text-ivory transition hover:bg-ivory/12"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-sky-400 to-indigo-500 text-[11px] font-bold text-white">
+        <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brass/18 text-[11px] font-black text-brass">
           {initials}
         </span>
-        <span className="hidden max-w-[12ch] truncate sm:inline">
-          {me.full_name || me.email}
-        </span>
-        <Chevron open={open} />
+        <span className="hidden max-w-[12ch] truncate sm:inline">{me.full_name || me.email}</span>
+        <ChevronDown
+          aria-hidden
+          className={cn("h-4 w-4 text-ivory-muted transition", open && "rotate-180")}
+        />
       </button>
+
       {open && (
         <div
           role="menu"
-          className="absolute right-0 mt-2 w-64 overflow-hidden rounded-2xl border border-white/10 bg-slate-900/95 shadow-2xl backdrop-blur"
+          className="glass-panel absolute right-0 mt-2 w-72 overflow-hidden rounded-2xl"
         >
-          <div className="border-b border-white/10 px-4 py-3">
-            <div className="truncate text-sm font-semibold text-white">
-              {me.full_name || me.email}
-            </div>
-            <div className="mt-0.5 truncate text-xs text-slate-400">{me.email}</div>
-            <span className="mt-2 inline-block rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-200">
+          <div className="border-b border-ivory/10 px-4 py-4">
+            <div className="truncate text-sm font-bold text-ivory">{me.full_name || me.email}</div>
+            <div className="mt-0.5 truncate text-xs text-ivory-muted">{me.email}</div>
+            <span className="mt-3 inline-flex rounded-full border border-aqua/20 bg-aqua/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.2em] text-aqua">
               {me.role}
             </span>
           </div>
-          <div className="py-1">
-            {items.map((it) => (
-              <NavLink
-                key={it.to}
-                to={it.to}
-                role="menuitem"
-                className={({ isActive }) =>
-                  `block px-4 py-2 text-sm transition ${
-                    isActive
-                      ? "bg-white/10 text-white"
-                      : "text-slate-200 hover:bg-white/5"
-                  }`
-                }
-              >
-                {it.label}
-              </NavLink>
-            ))}
+          <div className="py-1.5">
+            {items.map((it) => {
+              const Icon = it.icon;
+              return (
+                <NavLink
+                  key={it.to}
+                  to={it.to}
+                  role="menuitem"
+                  className={({ isActive }) =>
+                    cn(
+                      "flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition",
+                      isActive
+                        ? "bg-ivory/12 text-ivory"
+                        : "text-ivory-muted hover:bg-ivory/8 hover:text-ivory",
+                    )
+                  }
+                >
+                  {Icon && <Icon aria-hidden className="h-4 w-4" />}
+                  {it.label}
+                </NavLink>
+              );
+            })}
           </div>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={onSignOut}
-            className="block w-full border-t border-white/10 px-4 py-2.5 text-left text-sm text-rose-300 hover:bg-rose-500/10"
-          >
-            Sign out
-          </button>
+          <div className="border-t border-ivory/10 p-2">
+            <Button
+              type="button"
+              role="menuitem"
+              onClick={onSignOut}
+              variant="danger"
+              size="sm"
+              icon={LogOut}
+              className="w-full justify-start"
+            >
+              Sign out
+            </Button>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 12 12"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={`transition-transform ${open ? "rotate-180" : ""}`}
-    >
-      <polyline points="3 4.5 6 7.5 9 4.5" />
-    </svg>
-  );
-}
-
-type NavLinkSpec = { to: string; label: string; end?: boolean };
+type NavLinkSpec = { to: string; label: string; end?: boolean; icon?: LucideIcon };
 
 function primaryLinksFor(me: Me | null): NavLinkSpec[] {
-  const links: NavLinkSpec[] = [{ to: "/", label: "Browse", end: true }];
+  const links: NavLinkSpec[] = [{ to: "/", label: "Browse", end: true, icon: LayoutGrid }];
   if (!me) return links;
   if (me.role === "attendee") {
-    links.push({ to: "/me/tickets", label: "My tickets" });
+    links.push({ to: "/me/tickets", label: "Tickets", icon: Ticket });
   }
   if (me.role === "organiser") {
-    links.push({ to: "/org/events", label: "My events" });
+    links.push({ to: "/org/events", label: "Organizer", icon: BarChart3 });
   }
   if (me.role === "gate") {
-    links.push({ to: "/scan", label: "Scan" });
+    links.push({ to: "/scan", label: "Gate scan", icon: ScanLine });
   }
   if (me.role === "admin") {
-    links.push({ to: "/admin", label: "Admin" });
+    links.push({ to: "/admin", label: "Admin", icon: ShieldCheck });
   }
   return links;
 }
@@ -265,19 +242,19 @@ function primaryLinksFor(me: Me | null): NavLinkSpec[] {
 function userMenuItemsFor(me: Me): NavLinkSpec[] {
   const items: NavLinkSpec[] = [];
   if (me.role === "attendee" || me.role === "organiser") {
-    items.push({ to: "/me/profile", label: "Profile" });
+    items.push({ to: "/me/profile", label: "Profile", icon: User });
   }
   if (me.role === "attendee") {
-    items.push({ to: "/me/tickets", label: "My tickets" });
+    items.push({ to: "/me/tickets", label: "My tickets", icon: Ticket });
   }
   if (me.role === "organiser") {
-    items.push({ to: "/org/events", label: "My events" });
+    items.push({ to: "/org/events", label: "My events", icon: BarChart3 });
   }
   if (me.role === "gate") {
-    items.push({ to: "/scan", label: "Scanner" });
+    items.push({ to: "/scan", label: "Scanner", icon: ScanLine });
   }
   if (me.role === "admin") {
-    items.push({ to: "/admin", label: "Admin console" });
+    items.push({ to: "/admin", label: "Admin console", icon: ShieldCheck });
   }
   return items;
 }

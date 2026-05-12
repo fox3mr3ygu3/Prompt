@@ -1,5 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import {
+  CalendarDays,
+  CircleDollarSign,
+  LayoutDashboard,
+  Ticket,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { api } from "@/lib/api";
 import type {
   AttendeeProfile,
@@ -10,6 +18,17 @@ import type {
 } from "@/lib/api";
 import { fmtMoney } from "@/lib/format";
 import { useDocumentTitle } from "@/lib/use-document-title";
+import {
+  EmptyState,
+  ErrorState,
+  Field,
+  LinkButton,
+  LoadingState,
+  MetricCard,
+  PageShell,
+  Panel,
+  StatusPill,
+} from "@/components/ui";
 
 function fmtWhen(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -29,28 +48,6 @@ function fmtDate(iso: string): string {
   });
 }
 
-function statusPill(status: string): { label: string; cls: string } {
-  switch (status) {
-    case "valid":
-      return { label: "Valid", cls: "bg-emerald-500/15 text-emerald-300" };
-    case "used":
-      return { label: "Used", cls: "bg-slate-500/15 text-slate-300" };
-    case "refunded":
-      return { label: "Refunded", cls: "bg-amber-500/15 text-amber-300" };
-    case "approved":
-    case "published":
-      return { label: status, cls: "bg-emerald-500/15 text-emerald-300" };
-    case "draft":
-      return { label: "Draft", cls: "bg-slate-500/15 text-slate-300" };
-    case "cancelled":
-      return { label: "Cancelled", cls: "bg-red-500/15 text-red-300" };
-    case "completed":
-      return { label: "Completed", cls: "bg-sky-500/15 text-sky-300" };
-    default:
-      return { label: status, cls: "bg-slate-500/15 text-slate-300" };
-  }
-}
-
 export function Profile() {
   useDocumentTitle("Profile");
   const { data, isLoading, error } = useQuery({
@@ -60,16 +57,15 @@ export function Profile() {
     refetchOnWindowFocus: true,
   });
 
-  if (isLoading) return <p className="p-8 text-slate-400">Loading…</p>;
-  if (error || !data)
-    return <p className="p-8 text-red-400">Failed to load profile.</p>;
+  if (isLoading) return <LoadingState label="Loading profile" />;
+  if (error || !data) return <ErrorState label="Failed to load profile." />;
 
   return (
-    <main className="mx-auto max-w-4xl px-4 py-8 text-slate-100">
+    <PageShell>
       <Identity profile={data} />
       {data.attendee && <AttendeeBlock data={data.attendee} />}
       {data.organiser && <OrganiserBlock data={data.organiser} />}
-    </main>
+    </PageShell>
   );
 }
 
@@ -83,65 +79,79 @@ function Identity({ profile }: { profile: ProfileData }) {
       .join("") || "?";
 
   return (
-    <section className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900/80 to-slate-900/40 p-6">
-      <div className="flex items-center gap-4">
-        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-sky-500/20 text-xl font-bold text-sky-200">
+    <Panel className="overflow-hidden p-6 sm:p-8">
+      <div className="grid gap-6 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center">
+        <div className="flex h-20 w-20 items-center justify-center rounded-[1.5rem] border border-brass/30 bg-brass/12 font-display text-3xl font-bold text-brass shadow-brass">
           {initials}
         </div>
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-bold text-white">
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-aqua">
+            profile command center
+          </p>
+          <h1 className="mt-2 truncate font-display text-4xl font-bold text-ivory sm:text-5xl">
             {profile.user.full_name || profile.user.email}
           </h1>
-          <div className="mt-0.5 truncate text-sm text-slate-400">
+          <div className="mt-2 truncate text-sm font-semibold text-ivory-muted">
             {profile.user.email}
           </div>
         </div>
-        <span className="ml-auto shrink-0 rounded-full bg-slate-800 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-slate-200">
-          {profile.user.role}
-        </span>
+        <div className="flex flex-col gap-2 lg:items-end">
+          <StatusPill status={profile.user.role}>{profile.user.role}</StatusPill>
+          <span className="text-xs font-semibold text-ivory-muted">
+            Member since {fmtDate(profile.user.created_at)}
+          </span>
+        </div>
       </div>
-      <p className="mt-4 text-xs text-slate-500">
-        Member since {fmtDate(profile.user.created_at)} · all stats below are
-        computed live from the database on every load.
-      </p>
-    </section>
+    </Panel>
   );
 }
 
-// ── Attendee branch ────────────────────────────────────────────────────────
 function AttendeeBlock({ data }: { data: AttendeeProfile }) {
   const { stats, recent_tickets } = data;
   return (
     <>
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Kpi label="Tickets" value={stats.total.toLocaleString()} />
-        <Kpi label="Valid" value={stats.valid.toLocaleString()} />
-        <Kpi label="Used" value={stats.used.toLocaleString()} />
-        <Kpi label="Spent" value={fmtMoney(stats.spent_cents, stats.currency)} />
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <MetricCard label="Tickets" value={stats.total.toLocaleString()} icon={Ticket} />
+        <MetricCard
+          label="Valid"
+          value={stats.valid.toLocaleString()}
+          icon={UserRound}
+          tone="fern"
+        />
+        <MetricCard
+          label="Used"
+          value={stats.used.toLocaleString()}
+          icon={CalendarDays}
+          tone="brass"
+        />
+        <MetricCard
+          label="Spent"
+          value={fmtMoney(stats.spent_cents, stats.currency)}
+          icon={CircleDollarSign}
+          tone="ember"
+        />
       </div>
 
       <section className="mt-8">
-        <div className="flex items-end justify-between">
-          <h2 className="text-lg font-bold">Recent purchases</h2>
-          <Link
-            to="/me/tickets"
-            className="text-sm text-sky-300 hover:text-sky-200"
-          >
-            View all →
-          </Link>
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-aqua">activity</p>
+            <h2 className="mt-1 font-display text-3xl font-bold text-ivory">Recent purchases</h2>
+          </div>
+          <LinkButton to="/me/tickets" variant="secondary" size="sm" icon={Ticket}>
+            View all
+          </LinkButton>
         </div>
         {recent_tickets.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">
-            No tickets yet —{" "}
-            <Link to="/" className="text-sky-300 hover:text-sky-200">
-              browse events
-            </Link>
-            .
-          </p>
+          <EmptyState
+            title="No tickets yet"
+            description="Browse the catalog and your purchases will show here."
+            action={<LinkButton to="/">Browse events</LinkButton>}
+          />
         ) : (
-          <ul className="mt-4 space-y-3">
+          <ul className="space-y-3">
             {recent_tickets.map((t) => (
-              <RecentTicket key={t.id} t={t} />
+              <RecentTicket key={t.id} ticket={t} />
             ))}
           </ul>
         )}
@@ -150,84 +160,94 @@ function AttendeeBlock({ data }: { data: AttendeeProfile }) {
   );
 }
 
-function RecentTicket({ t }: { t: MyTicket }) {
-  const pill = statusPill(t.status);
+function RecentTicket({ ticket }: { ticket: MyTicket }) {
   return (
-    <li className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-      <div className="flex items-start justify-between gap-3">
+    <Panel className="p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <div className="text-xs uppercase tracking-wide text-slate-500">
-            {fmtWhen(t.event_starts_at)}
+          <div className="text-xs font-bold uppercase tracking-[0.18em] text-ivory-muted">
+            {fmtWhen(ticket.event_starts_at)}
           </div>
-          <div className="mt-1 truncate text-base font-semibold text-white">
-            {t.event_title}
+          <div className="mt-1 truncate font-display text-xl font-bold text-ivory">
+            {ticket.event_title}
           </div>
-          <div className="mt-0.5 truncate text-xs text-slate-400">
-            {t.venue_name} · {t.venue_city} · {t.room_name}
-            {t.seat_label ? ` · seat ${t.seat_label}` : ""}
+          <div className="mt-1 truncate text-sm text-ivory-muted">
+            {ticket.venue_name} · {ticket.venue_city} · {ticket.room_name}
+            {ticket.seat_label ? ` · seat ${ticket.seat_label}` : ""}
           </div>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${pill.cls}`}
-          >
-            {pill.label}
-          </span>
-          <span className="text-xs text-slate-400">
-            {fmtMoney(t.price_cents, t.currency)}
+        <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
+          <StatusPill status={ticket.status}>{ticket.status}</StatusPill>
+          <span className="text-sm font-bold text-aqua">
+            {fmtMoney(ticket.price_cents, ticket.currency)}
           </span>
         </div>
       </div>
-    </li>
+    </Panel>
   );
 }
 
-// ── Organiser branch ───────────────────────────────────────────────────────
 function OrganiserBlock({ data }: { data: OrganiserProfile }) {
   return (
     <>
-      <section className="mt-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-        <div className="text-xs uppercase tracking-wider text-slate-500">
-          Organisation
-        </div>
-        <div className="mt-1 text-lg font-semibold text-white">
-          {data.organisation_name || "—"}
-        </div>
-        {data.organisation_slug && (
-          <div className="mt-0.5 text-xs text-slate-400">
-            /{data.organisation_slug}
+      <Panel className="mt-6 p-5">
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.22em] text-ivory-muted">
+              Organisation
+            </div>
+            <div className="mt-1 font-display text-3xl font-bold text-ivory">
+              {data.organisation_name || "—"}
+            </div>
+            {data.organisation_slug && (
+              <div className="mt-1 text-sm font-semibold text-ivory-muted">
+                /{data.organisation_slug}
+              </div>
+            )}
           </div>
-        )}
-      </section>
+          <LinkButton to="/org/events" icon={LayoutDashboard}>
+            Open dashboard
+          </LinkButton>
+        </div>
+      </Panel>
 
-      <div className="mt-6 grid grid-cols-3 gap-3">
-        <Kpi label="Events" value={data.event_count.toLocaleString()} />
-        <Kpi label="Attendees" value={data.attendee_count.toLocaleString()} />
-        <Kpi label="Gross" value={fmtMoney(data.gross_cents, data.currency)} />
+      <div className="mt-6 grid gap-4 sm:grid-cols-3">
+        <MetricCard label="Events" value={data.event_count.toLocaleString()} icon={CalendarDays} />
+        <MetricCard
+          label="Attendees"
+          value={data.attendee_count.toLocaleString()}
+          icon={Users}
+          tone="fern"
+        />
+        <MetricCard
+          label="Gross"
+          value={fmtMoney(data.gross_cents, data.currency)}
+          icon={CircleDollarSign}
+          tone="brass"
+        />
       </div>
 
       <section className="mt-8">
-        <div className="flex items-end justify-between">
-          <h2 className="text-lg font-bold">My events</h2>
-          <Link
-            to="/org/events"
-            className="text-sm text-sky-300 hover:text-sky-200"
-          >
-            View all →
-          </Link>
+        <div className="mb-4 flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-aqua">
+              organizer pulse
+            </p>
+            <h2 className="mt-1 font-display text-3xl font-bold text-ivory">My events</h2>
+          </div>
+          <LinkButton to="/org/events" variant="secondary" size="sm">
+            View all
+          </LinkButton>
         </div>
         {data.recent_events.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">
-            No events yet — submit one from the{" "}
-            <Link to="/org/events" className="text-sky-300 hover:text-sky-200">
-              My events
-            </Link>{" "}
-            page.
-          </p>
+          <EmptyState
+            title="No events yet"
+            description="Submit an event from the organizer dashboard and approved events will appear here."
+          />
         ) : (
-          <ul className="mt-4 space-y-3">
-            {data.recent_events.map((e) => (
-              <RecentEvent key={e.id} e={e} />
+          <ul className="space-y-3">
+            {data.recent_events.map((event) => (
+              <RecentEvent key={event.id} event={event} />
             ))}
           </ul>
         )}
@@ -236,58 +256,28 @@ function OrganiserBlock({ data }: { data: OrganiserProfile }) {
   );
 }
 
-function RecentEvent({ e }: { e: OrgEvent }) {
-  const pill = statusPill(e.status);
+function RecentEvent({ event }: { event: OrgEvent }) {
   return (
-    <li className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-      <div className="flex items-start justify-between gap-3">
+    <Panel className="p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <Link
-            to={`/org/events/${e.slug}/attendees`}
-            className="truncate text-base font-semibold text-white hover:text-sky-300"
+            to={`/org/events/${event.slug}/attendees`}
+            className="truncate font-display text-xl font-bold text-ivory hover:text-aqua"
           >
-            {e.title}
+            {event.title}
           </Link>
-          <div className="mt-0.5 truncate text-xs text-slate-400">
-            {fmtWhen(e.starts_at)} · {e.venue_name} · {e.room_name}
+          <div className="mt-1 truncate text-sm text-ivory-muted">
+            {fmtWhen(event.starts_at)} · {event.venue_name} · {event.room_name}
           </div>
         </div>
-        <span
-          className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${pill.cls}`}
-        >
-          {pill.label}
-        </span>
+        <StatusPill status={event.status}>{event.status}</StatusPill>
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-3">
-        <Field
-          label="Attendees"
-          value={`${e.attendee_count} / ${e.capacity}`}
-        />
-        <Field label="Scanned" value={e.scanned_count.toLocaleString()} />
-        <Field label="Gross" value={fmtMoney(e.gross_cents, e.currency)} />
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        <Field label="Attendees" value={`${event.attendee_count} / ${event.capacity}`} />
+        <Field label="Scanned" value={event.scanned_count.toLocaleString()} />
+        <Field label="Gross" value={fmtMoney(event.gross_cents, event.currency)} />
       </div>
-    </li>
-  );
-}
-
-function Kpi({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
-      <div className="text-[11px] uppercase tracking-wider text-slate-500">
-        {label}
-      </div>
-      <div className="mt-1 text-2xl font-bold text-white">{value}</div>
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wider text-slate-500">
-        {label}
-      </div>
-      <div className="mt-0.5 text-sm text-white">{value}</div>
-    </div>
+    </Panel>
   );
 }

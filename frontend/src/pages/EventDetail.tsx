@@ -1,8 +1,21 @@
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, CalendarDays, CheckCircle2, MapPin, Mic2, Ticket, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { EventDetail as EventDetailT, api } from "@/lib/api";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { fmtMoney } from "@/lib/format";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Field,
+  LinkButton,
+  LoadingState,
+  PageShell,
+  Panel,
+  StatusPill,
+} from "@/components/ui";
 
 type PurchaseLocationState = { purchaseSuccess?: boolean; orderId?: string };
 
@@ -13,7 +26,11 @@ export function EventDetail() {
   const purchaseState = (loc.state ?? null) as PurchaseLocationState | null;
   const justBought = Boolean(purchaseState?.purchaseSuccess);
 
-  const { data: detail, isLoading, error } = useQuery({
+  const {
+    data: detail,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["event", slug],
     queryFn: async () => (await api.get<EventDetailT>(`/events/${slug}`)).data,
     enabled: !!slug,
@@ -21,39 +38,96 @@ export function EventDetail() {
 
   useDocumentTitle(detail?.title ?? "");
 
-  if (isLoading)
-    return <p className="mx-auto max-w-4xl px-4 py-12 text-slate-400">Loading…</p>;
-  if (error || !detail)
-    return <p className="mx-auto max-w-4xl px-4 py-12 text-red-400">Failed to load event.</p>;
+  if (isLoading) return <LoadingState label="Loading event" />;
+  if (error || !detail) return <ErrorState label="Failed to load event." />;
 
-  // Pick the cheapest tier for the "From" headline price; the seat picker
-  // shows the per-tier breakdown once the buyer enters the hall.
   const cheapestTier =
-    [...detail.price_tiers].sort((a, b) => a.price_cents - b.price_cents)[0] ??
-    null;
+    [...detail.price_tiers].sort((a, b) => a.price_cents - b.price_cents)[0] ?? null;
   const priciestTier =
-    [...detail.price_tiers].sort((a, b) => b.price_cents - a.price_cents)[0] ??
-    null;
+    [...detail.price_tiers].sort((a, b) => b.price_cents - a.price_cents)[0] ?? null;
   const startsAt = new Date(detail.starts_at);
+  const endsAt = new Date(detail.ends_at);
 
   return (
-    <main className="text-slate-100">
-      <Hero detail={detail} startsAt={startsAt} />
+    <PageShell>
+      <Hero detail={detail} startsAt={startsAt} onGetTickets={() => nav(`/events/${slug}/seats`)} />
 
-      <div className="mx-auto grid max-w-4xl gap-8 px-4 py-8 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      <div className="mt-7 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="space-y-6">
           {justBought && <PurchaseSuccessBanner />}
-          <h2 className="text-xl font-semibold">About this event</h2>
-          <p className="mt-2 leading-relaxed text-slate-300">{detail.description}</p>
 
-          {detail.speakers.length > 0 && (
-            <Section title="Speakers">
-              <ul className="mt-3 space-y-2">
+          <Panel className="p-6">
+            <div className="mb-4 flex flex-wrap gap-2">
+              <StatusPill status={detail.status}>{detail.status}</StatusPill>
+              <span className="rounded-full border border-ivory/12 bg-ivory/7 px-2.5 py-1 text-xs font-bold text-ivory-muted">
+                {detail.room.kind === "seated" ? "Assigned seating" : "General admission"}
+              </span>
+              {detail.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="rounded-full border border-ivory/10 bg-ink-2 px-2.5 py-1 text-xs font-semibold text-ivory-muted"
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+            <h2 className="font-display text-3xl font-bold text-ivory">About this event</h2>
+            <p className="mt-3 whitespace-pre-line text-base leading-8 text-ivory-muted">
+              {detail.description}
+            </p>
+          </Panel>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <InfoTile
+              icon={CalendarDays}
+              label="Schedule"
+              value={startsAt.toLocaleDateString(undefined, {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+              detail={`${startsAt.toLocaleTimeString(undefined, {
+                hour: "2-digit",
+                minute: "2-digit",
+              })} to ${endsAt.toLocaleTimeString(undefined, {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}`}
+            />
+            <InfoTile
+              icon={MapPin}
+              label="Venue"
+              value={detail.venue.name}
+              detail={`${detail.venue.city}, ${detail.venue.country}`}
+            />
+            <InfoTile
+              icon={Users}
+              label="Capacity"
+              value={detail.room.capacity.toLocaleString()}
+              detail={detail.room.name}
+            />
+          </div>
+
+          {detail.speakers.length > 0 ? (
+            <Panel className="p-6">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.22em] text-aqua">voices</p>
+                  <h2 className="mt-1 font-display text-3xl font-bold text-ivory">Speakers</h2>
+                </div>
+                <Mic2 aria-hidden className="h-7 w-7 text-brass" />
+              </div>
+              <ul className="mt-5 grid gap-3 sm:grid-cols-2">
                 {detail.speakers.map((s) => (
                   <SpeakerRow key={s.id} name={s.name} affiliation={s.affiliation} />
                 ))}
               </ul>
-            </Section>
+            </Panel>
+          ) : (
+            <EmptyState
+              title="Speaker lineup coming soon"
+              description="The organizer has not published the speaker list yet."
+            />
           )}
         </div>
 
@@ -66,78 +140,123 @@ export function EventDetail() {
           onGetTickets={() => nav(`/events/${slug}/seats`)}
         />
       </div>
-    </main>
+    </PageShell>
   );
 }
 
 function Hero({
   detail,
   startsAt,
+  onGetTickets,
 }: {
   detail: EventDetailT;
   startsAt: Date;
+  onGetTickets: () => void;
 }) {
   return (
-    <div
-      className="relative h-72 w-full bg-slate-800 bg-cover bg-center sm:h-96"
-      style={
-        detail.cover_image_url
-          ? { backgroundImage: `url(${detail.cover_image_url})` }
-          : undefined
-      }
-    >
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
-      <div className="absolute inset-x-0 bottom-0 mx-auto max-w-4xl px-4 pb-6">
-        {detail.category && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-900/80 px-3 py-1 text-xs uppercase tracking-wide text-slate-200 backdrop-blur">
-            {detail.category.icon} {detail.category.name}
-          </span>
-        )}
-        <h1 className="mt-2 text-3xl font-extrabold tracking-tight sm:text-4xl">
-          {detail.title}
-        </h1>
-        <p className="mt-1 text-slate-300">
-          {detail.venue.name} · {detail.venue.city} · {detail.room.name} ·{" "}
-          {startsAt.toLocaleString(undefined, {
-            weekday: "short",
-            day: "numeric",
-            month: "short",
-            hour: "2-digit",
-            minute: "2-digit",
-          })}
-        </p>
+    <section className="relative overflow-hidden rounded-[2rem] border border-ivory/12 bg-ink-2 shadow-2xl">
+      <div className="absolute inset-0 bg-scan-lines opacity-60" aria-hidden />
+      <div className="grid min-h-[460px] lg:grid-cols-[minmax(0,1fr)_420px]">
+        <div className="relative flex min-h-[420px] items-end overflow-hidden">
+          {detail.cover_image_url ? (
+            <img
+              src={detail.cover_image_url}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-ticket-grid bg-[length:42px_42px]" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-ink via-ink/45 to-ink/5" />
+          <div className="relative max-w-4xl p-6 sm:p-8 lg:p-10">
+            {detail.category && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-ivory/16 bg-ink/70 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-ivory backdrop-blur">
+                {detail.category.icon} {detail.category.name}
+              </span>
+            )}
+            <h1 className="mt-4 font-display text-5xl font-bold leading-[0.95] tracking-normal text-ivory sm:text-6xl">
+              {detail.title}
+            </h1>
+            <div className="mt-5 flex flex-wrap gap-3 text-sm font-semibold text-ivory-muted">
+              <span className="inline-flex items-center gap-2">
+                <MapPin aria-hidden className="h-4 w-4 text-brass" />
+                {detail.venue.name}, {detail.venue.city}
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <CalendarDays aria-hidden className="h-4 w-4 text-aqua" />
+                {startsAt.toLocaleString(undefined, {
+                  weekday: "short",
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative flex flex-col justify-end border-t border-ivory/10 bg-ink/76 p-6 backdrop-blur-xl lg:border-l lg:border-t-0 lg:p-8">
+          <div className="mb-auto inline-flex w-fit rounded-full border border-aqua/20 bg-aqua/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-aqua">
+            live checkout
+          </div>
+          <div className="mt-10 space-y-4">
+            <Field label="Room" value={detail.room.name} />
+            <Field
+              label="Ticketing"
+              value={detail.room.kind === "seated" ? "Pick exact seats" : "Quantity based"}
+            />
+            <Button type="button" onClick={onGetTickets} size="lg" icon={Ticket} className="w-full">
+              Choose tickets
+            </Button>
+          </div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
 function PurchaseSuccessBanner() {
   return (
-    <div className="mb-6 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-emerald-100">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="font-semibold">Payment successful</div>
-          <div className="mt-0.5 text-sm text-emerald-200/80">
-            Your ticket is issued and saved against your account.
+    <Panel className="border-emerald-300/24 bg-emerald-400/10 p-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-start gap-3">
+          <CheckCircle2 aria-hidden className="mt-0.5 h-5 w-5 text-emerald-200" />
+          <div>
+            <div className="font-bold text-emerald-100">Payment successful</div>
+            <div className="mt-1 text-sm text-emerald-100/75">
+              Your ticket is issued and saved to your account.
+            </div>
           </div>
         </div>
-        <Link
-          to="/me/tickets"
-          className="shrink-0 rounded-lg bg-emerald-500/20 px-3 py-1.5 text-sm font-semibold text-emerald-100 hover:bg-emerald-500/30"
-        >
-          View my tickets →
-        </Link>
+        <LinkButton to="/me/tickets" variant="success" size="sm" icon={ArrowRight}>
+          View tickets
+        </LinkButton>
       </div>
-    </div>
+    </Panel>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function InfoTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  detail: string;
+}) {
   return (
-    <>
-      <h2 className="mt-8 text-xl font-semibold">{title}</h2>
-      {children}
-    </>
+    <Panel className="p-4">
+      <Icon aria-hidden className="h-5 w-5 text-aqua" />
+      <div className="mt-4 text-[11px] font-bold uppercase tracking-[0.2em] text-ivory-muted">
+        {label}
+      </div>
+      <div className="mt-1 line-clamp-1 font-display text-xl font-bold text-ivory">{value}</div>
+      <div className="mt-1 line-clamp-2 text-xs text-ivory-muted">{detail}</div>
+    </Panel>
   );
 }
 
@@ -148,13 +267,15 @@ function SpeakerRow({ name, affiliation }: { name: string; affiliation: string }
     .join("")
     .slice(0, 2);
   return (
-    <li className="flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
-      <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold">
-        {initials}
-      </div>
-      <div>
-        <div className="font-medium text-white">{name}</div>
-        <div className="text-xs text-slate-400">{affiliation}</div>
+    <li className="rounded-2xl border border-ivory/10 bg-ink-2/72 p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brass/14 text-sm font-black text-brass">
+          {initials}
+        </div>
+        <div className="min-w-0">
+          <div className="truncate font-bold text-ivory">{name}</div>
+          <div className="mt-0.5 truncate text-xs text-ivory-muted">{affiliation}</div>
+        </div>
       </div>
     </li>
   );
@@ -176,47 +297,51 @@ function CtaCard({
   onGetTickets: () => void;
 }) {
   const hasRange =
-    !!cheapestTier &&
-    !!priciestTier &&
-    priciestTier.price_cents > cheapestTier.price_cents;
+    !!cheapestTier && !!priciestTier && priciestTier.price_cents > cheapestTier.price_cents;
   return (
     <aside className="lg:col-span-1">
-      <div className="sticky top-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-        <div className="text-xs uppercase tracking-wide text-slate-400">Hall</div>
-        <div className="mt-0.5 text-sm font-medium text-slate-100">{roomName}</div>
-        <div className="text-xs text-slate-500">at {venueName}</div>
+      <Panel className="sticky top-24 overflow-hidden p-6">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-aqua via-brass to-ember" />
+        <div className="text-xs font-bold uppercase tracking-[0.22em] text-ivory-muted">
+          Reserve access
+        </div>
+        <div className="mt-5 rounded-2xl border border-ivory/10 bg-ink-2/72 p-4">
+          <Field label="Hall" value={roomName} />
+          <div className="mt-3 text-xs text-ivory-muted">at {venueName}</div>
+        </div>
 
-        <div className="mt-4 text-xs uppercase tracking-wide text-slate-400">
-          {hasRange ? "From" : "Ticket price"}
-        </div>
-        <div className="mt-1 flex items-baseline gap-2 text-white">
-          <span className="text-3xl font-bold">
-            {cheapestTier
-              ? fmtMoney(cheapestTier.price_cents, cheapestTier.currency)
-              : "—"}
-          </span>
-          {hasRange && priciestTier && (
-            <span className="text-sm text-slate-400">
-              up to {fmtMoney(priciestTier.price_cents, priciestTier.currency)}
+        <div className="mt-5">
+          <div className="text-xs font-bold uppercase tracking-[0.22em] text-ivory-muted">
+            {hasRange ? "From" : "Ticket price"}
+          </div>
+          <div className="mt-2 flex flex-wrap items-baseline gap-2 text-ivory">
+            <span className="font-display text-4xl font-bold">
+              {cheapestTier ? fmtMoney(cheapestTier.price_cents, cheapestTier.currency) : "—"}
             </span>
-          )}
+            {hasRange && priciestTier && (
+              <span className="text-sm font-semibold text-ivory-muted">
+                to {fmtMoney(priciestTier.price_cents, priciestTier.currency)}
+              </span>
+            )}
+          </div>
         </div>
-        <button
+
+        <Button
           type="button"
           onClick={onGetTickets}
           disabled={!cheapestTier}
-          className="mt-4 w-full rounded-lg bg-sky-500 px-4 py-2.5 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700"
+          icon={Ticket}
+          size="lg"
+          className="mt-5 w-full"
         >
-          {cheapestTier ? "Get tickets →" : "Not on sale"}
-        </button>
-        <p className="mt-3 text-xs text-slate-500">
+          {cheapestTier ? "Get tickets" : "Not on sale"}
+        </Button>
+        <p className="mt-4 text-sm leading-6 text-ivory-muted">
           {roomKind === "seated"
-            ? hasRange
-              ? "Closer rows cost more — pick exactly the seats you want."
-              : "Pick exactly the seats you want."
-            : "General admission, by quantity."}
+            ? "Seat color maps to tier price; selected seats are held before payment."
+            : "General admission tickets are held by quantity before payment."}
         </p>
-      </div>
+      </Panel>
     </aside>
   );
 }

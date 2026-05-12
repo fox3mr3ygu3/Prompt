@@ -1,19 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ApiErr,
-  EventDetail as EventDetailT,
-  Seat as SeatT,
-  SeatMap,
-  api,
-} from "@/lib/api";
+import { Clock3, ShieldCheck, Ticket } from "lucide-react";
+import { ApiErr, EventDetail as EventDetailT, Seat as SeatT, SeatMap, api } from "@/lib/api";
 import { useCheckout } from "@/lib/checkout-context";
 import { useAuth } from "@/lib/auth-context";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { fmtMoney } from "@/lib/format";
 import { SeatedHall } from "@/components/seats/SeatedHall";
 import { GAPicker } from "@/components/seats/GAPicker";
+import { BackLink, Button, Field, LoadingState, PageShell, Panel } from "@/components/ui";
+import { cn } from "@/lib/cn";
 
 export function Seats() {
   const { slug = "" } = useParams<{ slug: string }>();
@@ -57,8 +54,7 @@ export function Seats() {
       ws.onopen = () => {
         attempt = 0;
       };
-      ws.onmessage = () =>
-        qc.invalidateQueries({ queryKey: ["seats", slug] });
+      ws.onmessage = () => qc.invalidateQueries({ queryKey: ["seats", slug] });
       ws.onclose = () => {
         if (cancelled) return;
         const delay = Math.min(15_000, 500 * 2 ** attempt);
@@ -85,9 +81,7 @@ export function Seats() {
 
   function toggleSeat(s: { id: string; state: string }) {
     if (s.state !== "free") return;
-    setPicked((cur) =>
-      cur.includes(s.id) ? cur.filter((x) => x !== s.id) : [...cur, s.id],
-    );
+    setPicked((cur) => (cur.includes(s.id) ? cur.filter((x) => x !== s.id) : [...cur, s.id]));
   }
 
   // For GA rooms there's still one effective price; for seated rooms each
@@ -149,7 +143,7 @@ export function Seats() {
         total_cents: totalCents,
         currency: tier.currency,
         holders: Array.from({ length: holderCount }, (_, i) => ({
-          seat_id: isSeated ? picked[i] ?? null : null,
+          seat_id: isSeated ? (picked[i] ?? null) : null,
           first_name: "",
           last_name: "",
         })),
@@ -163,48 +157,58 @@ export function Seats() {
     }
   }
 
-  if (!detail)
-    return <p className="mx-auto max-w-4xl px-4 py-12 text-slate-400">Loading…</p>;
+  if (!detail) return <LoadingState label="Loading seat selection" />;
 
   const isSeated = detail.room.kind === "seated";
   const canContinue = isSeated ? picked.length > 0 : gaQty > 0;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-32 pt-6 text-slate-100">
-      <button
-        type="button"
-        onClick={() => nav(`/events/${slug}`)}
-        className="text-sm text-slate-400 hover:text-white"
-      >
-        ← back to event
-      </button>
-      <h1 className="mt-2 text-2xl font-bold sm:text-3xl">{detail.title}</h1>
-      <p className="text-slate-400">
-        {detail.venue.name} · {detail.venue.city} · {detail.room.name}
-      </p>
-      {tier && isSeated ? (
-        <p className="mt-1 text-sm text-slate-400">
-          Closer to the stage costs more — pick a row and the price updates
-          live below.
-        </p>
-      ) : (
-        tier && (
-          <p className="mt-1 text-sm text-slate-400">
-            Ticket price:{" "}
-            <span className="font-semibold text-sky-300">
-              {fmtMoney(tier.price_cents, tier.currency)}
-            </span>
+    <PageShell className="pb-36">
+      <BackLink to={`/events/${slug}`}>Back to event</BackLink>
+      <div className="mb-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-aqua">
+            ticket hold
           </p>
-        )
-      )}
+          <h1 className="font-display text-4xl font-bold leading-tight text-ivory sm:text-5xl">
+            {detail.title}
+          </h1>
+          <p className="mt-2 text-sm font-semibold text-ivory-muted">
+            {detail.venue.name} · {detail.venue.city} · {detail.room.name}
+          </p>
+        </div>
+        <Panel className="p-4">
+          <div className="grid grid-cols-3 gap-3">
+            <Field label="Mode" value={isSeated ? "Seat map" : "General"} />
+            <Field label="Hold" value="5 min" />
+            <Field
+              label="Base"
+              value={tier ? fmtMoney(tier.price_cents, tier.currency, { compact: true }) : "—"}
+            />
+          </div>
+        </Panel>
+      </div>
+
+      <Panel className="mb-6 p-4">
+        <div className="grid gap-3 text-sm text-ivory-muted sm:grid-cols-3">
+          <div className="flex items-center gap-2">
+            <ShieldCheck aria-hidden className="h-4 w-4 text-aqua" />
+            Atomic hold prevents double-booking.
+          </div>
+          <div className="flex items-center gap-2">
+            <Clock3 aria-hidden className="h-4 w-4 text-brass" />
+            Price updates from selected seats.
+          </div>
+          <div className="flex items-center gap-2">
+            <Ticket aria-hidden className="h-4 w-4 text-ember" />
+            Named tickets are collected next.
+          </div>
+        </div>
+      </Panel>
 
       {isSeated ? (
         <div className="mt-6">
-          <SeatedHall
-            seatMap={seatMap}
-            picked={picked}
-            onToggle={toggleSeat}
-          />
+          <SeatedHall seatMap={seatMap} picked={picked} onToggle={toggleSeat} />
         </div>
       ) : (
         <GAPicker
@@ -227,7 +231,7 @@ export function Seats() {
         error={error}
         onContinue={onContinue}
       />
-    </main>
+    </PageShell>
   );
 }
 
@@ -255,47 +259,45 @@ function ContinueBar({
   onContinue: () => void;
 }) {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-800 bg-slate-950/90 px-4 py-3 backdrop-blur">
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4">
-        <div className="text-sm text-slate-300">
+    <div className="fixed inset-x-0 bottom-0 z-30 border-t border-ivory/10 bg-ink/90 px-4 py-3 backdrop-blur-2xl">
+      <div className="mx-auto flex max-w-7xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm font-semibold text-ivory-muted">
           {isSeated ? (
             <>
-              Selected:{" "}
-              <span className="font-semibold text-white">{pickedCount}</span>{" "}
-              seat{pickedCount === 1 ? "" : "s"}
+              Selected: <span className="font-bold text-ivory">{pickedCount}</span> seat
+              {pickedCount === 1 ? "" : "s"}
               {tierBreakdown.length > 0 && (
-                <span className="ml-2 text-xs text-slate-400">
-                  ({tierBreakdown
-                    .map(([name, n]) => `${n} ${name}`)
-                    .join(" · ")})
+                <span className="ml-2 text-xs text-ivory-muted">
+                  ({tierBreakdown.map(([name, n]) => `${n} ${name}`).join(" · ")})
                 </span>
               )}
             </>
           ) : (
             <>
-              Quantity: <span className="font-semibold text-white">{gaQty}</span>
+              Quantity: <span className="font-bold text-ivory">{gaQty}</span>
             </>
           )}
           {total > 0 && (
             <>
-              {" "}· Total{" "}
-              <span className="font-semibold text-sky-300">
-                {fmtMoney(total, currency)}
-              </span>
+              {" "}
+              · Total <span className="font-bold text-aqua">{fmtMoney(total, currency)}</span>
             </>
           )}
         </div>
-        <button
+        <Button
           type="button"
           disabled={!canContinue || busy}
           onClick={onContinue}
-          className="rounded-lg bg-sky-500 px-5 py-2.5 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700"
+          icon={Ticket}
+          className={cn("w-full sm:w-auto", !canContinue && "shadow-none")}
         >
-          {busy ? "Holding…" : "Continue →"}
-        </button>
+          {busy ? "Holding seats" : "Continue"}
+        </Button>
       </div>
       {error && (
-        <p className="mx-auto mt-2 max-w-6xl text-sm text-red-400">{error}</p>
+        <p className="mx-auto mt-2 max-w-7xl rounded-xl border border-red-300/20 bg-red-400/10 px-3 py-2 text-sm font-semibold text-red-100">
+          {error}
+        </p>
       )}
     </div>
   );

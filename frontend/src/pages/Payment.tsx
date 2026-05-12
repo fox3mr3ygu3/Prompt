@@ -1,10 +1,12 @@
 import { FormEvent, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import { ArrowRight, CreditCard, LockKeyhole, Receipt, ShieldCheck } from "lucide-react";
 import { ApiErr, api, Order } from "@/lib/api";
 import { useCheckout } from "@/lib/checkout-context";
 import { useDocumentTitle } from "@/lib/use-document-title";
 import { fmtMoney } from "@/lib/format";
+import { BackLink, Button, Field, PageHeader, PageShell, Panel, TextInput } from "@/components/ui";
 
 /** Format card number as 4-4-4-4 (or 4-6-5 for Amex 15-digit). */
 function formatPan(raw: string): string {
@@ -45,16 +47,14 @@ export function Payment() {
 
   if (!state.event_id || state.event_id !== slug || !state.hold_token) {
     return (
-      <main className="mx-auto max-w-md px-4 py-12 text-slate-100">
-        <p>Your hold expired. Start over from the event page.</p>
-        <button
-          type="button"
-          onClick={() => nav(`/events/${slug}`)}
-          className="mt-4 rounded-lg bg-sky-500 px-4 py-2 font-semibold"
-        >
-          Back to event
-        </button>
-      </main>
+      <PageShell narrow>
+        <Panel className="p-6">
+          <p className="text-ivory-muted">Your hold expired. Start over from the event page.</p>
+          <Button type="button" onClick={() => nav(`/events/${slug}`)} className="mt-4">
+            Back to event
+          </Button>
+        </Panel>
+      </PageShell>
     );
   }
 
@@ -124,114 +124,121 @@ export function Payment() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8 text-slate-100">
-      <button
-        type="button"
-        onClick={() => nav(`/events/${slug}/holders`)}
-        className="text-sm text-slate-400 hover:text-white"
-      >
-        ← back to attendee details
-      </button>
-      <h1 className="mt-2 text-2xl font-bold sm:text-3xl">Payment</h1>
+    <PageShell narrow>
+      <BackLink to={`/events/${slug}/holders`}>Back to attendee details</BackLink>
+      <PageHeader
+        eyebrow="checkout 03"
+        title="Payment"
+        description="Demo payment is validated in the app flow and then atomically converts the hold into issued tickets."
+      />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_300px]">
+      <div className="mt-6 grid gap-6 lg:grid-cols-[1fr_320px]">
         {/* Card form */}
-        <form
-          onSubmit={onSubmit}
-          className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5"
-        >
-          <label className="text-xs uppercase tracking-wide text-slate-400">
-            Card number
-          </label>
-          <input
+        <form onSubmit={onSubmit} className="glass-panel rounded-2xl p-5">
+          <div className="mb-5 rounded-2xl border border-ivory/12 bg-gradient-to-br from-ivory/12 to-aqua/8 p-5">
+            <div className="flex items-center justify-between">
+              <CreditCard aria-hidden className="h-6 w-6 text-aqua" />
+              <span className="text-xs font-bold uppercase tracking-[0.2em] text-ivory-muted">
+                mock secure
+              </span>
+            </div>
+            <div className="mt-8 font-mono text-xl font-bold tracking-[0.16em] text-ivory">
+              {card || "4242 4242 4242 4242"}
+            </div>
+            <div className="mt-5 flex items-end justify-between gap-4">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-ivory-muted">
+                  Holder
+                </div>
+                <div className="mt-1 truncate text-sm font-bold text-ivory">
+                  {holder || "JANE DOE"}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-ivory-muted">
+                  Exp
+                </div>
+                <div className="mt-1 text-sm font-bold text-ivory">{exp || "12/29"}</div>
+              </div>
+            </div>
+          </div>
+
+          <TextInput
+            label="Card number"
             value={card}
             onChange={(e) => setCard(formatPan(e.target.value))}
             placeholder="4242 4242 4242 4242"
             inputMode="numeric"
             autoComplete="cc-number"
-            className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2.5 font-mono text-white placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
+            icon={CreditCard}
+            inputClassName="font-mono"
           />
 
-          <label className="mt-4 block text-xs uppercase tracking-wide text-slate-400">
-            Cardholder name
-          </label>
-          <input
+          <TextInput
+            label="Cardholder name"
             value={holder}
             onChange={(e) => setHolder(e.target.value.toUpperCase())}
             placeholder="JANE DOE"
             autoComplete="cc-name"
-            className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2.5 text-white placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
+            className="mt-4"
           />
 
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs uppercase tracking-wide text-slate-400">
-                Expiry (MM/YY)
-              </label>
-              <input
-                value={exp}
-                onChange={(e) => setExp(formatExp(e.target.value, exp))}
-                placeholder="12/29"
-                inputMode="numeric"
-                maxLength={5}
-                autoComplete="cc-exp"
-                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2.5 text-white placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-wide text-slate-400">
-                CVV
-              </label>
-              <input
-                value={cvv}
-                onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                placeholder="123"
-                inputMode="numeric"
-                autoComplete="cc-csc"
-                className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2.5 text-white placeholder:text-slate-500 focus:border-sky-500 focus:outline-none"
-              />
-            </div>
+            <TextInput
+              label="Expiry"
+              value={exp}
+              onChange={(e) => setExp(formatExp(e.target.value, exp))}
+              placeholder="12/29"
+              inputMode="numeric"
+              maxLength={5}
+              autoComplete="cc-exp"
+              icon={LockKeyhole}
+            />
+            <TextInput
+              label="CVV"
+              value={cvv}
+              onChange={(e) => setCvv(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              placeholder="123"
+              inputMode="numeric"
+              autoComplete="cc-csc"
+              icon={ShieldCheck}
+            />
           </div>
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="mt-6 w-full rounded-lg bg-sky-500 px-4 py-2.5 font-semibold text-white transition hover:bg-sky-400 disabled:cursor-not-allowed disabled:bg-slate-700"
-          >
+          <Button type="submit" disabled={busy} className="mt-6 w-full" icon={ArrowRight}>
             {busy ? "Processing…" : `Pay ${fmtMoney(state.total_cents, state.currency)}`}
-          </button>
-          {err && <p className="mt-2 text-sm text-red-400">{err}</p>}
-          <p className="mt-3 text-[11px] text-slate-500">
-            Demo only — no real charge is made. Card details are stored against the
-            order so the organiser/admin side can reconcile refunds.
+          </Button>
+          {err && (
+            <p className="mt-3 rounded-xl border border-red-300/24 bg-red-400/12 px-3 py-2 text-sm font-semibold text-red-100">
+              {err}
+            </p>
+          )}
+          <p className="mt-3 text-xs leading-5 text-ivory-muted">
+            Demo only — no real charge is made. Card details are stored against the order so the
+            organiser/admin side can reconcile refunds.
           </p>
         </form>
 
         {/* Summary */}
-        <aside className="rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-            Order summary
-          </h2>
-          <dl className="mt-3 space-y-2 text-sm">
-            <div className="flex justify-between">
-              <dt className="text-slate-400">Tickets</dt>
-              <dd className="font-medium">{state.holders.length}</dd>
-            </div>
-            <div className="flex justify-between">
-              <dt className="text-slate-400">Subtotal</dt>
-              <dd className="font-medium">
+        <Panel className="h-fit p-5">
+          <div className="flex items-center gap-2">
+            <Receipt aria-hidden className="h-5 w-5 text-brass" />
+            <h2 className="font-display text-2xl font-bold text-ivory">Order summary</h2>
+          </div>
+          <div className="mt-5 space-y-4">
+            <Field label="Tickets" value={state.holders.length.toLocaleString()} />
+            <Field label="Subtotal" value={fmtMoney(state.total_cents, state.currency)} />
+            <div className="border-t border-ivory/10 pt-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-ivory-muted">
+                Total
+              </div>
+              <div className="mt-1 font-display text-3xl font-bold text-aqua">
                 {fmtMoney(state.total_cents, state.currency)}
-              </dd>
+              </div>
             </div>
-            <div className="flex justify-between border-t border-slate-800 pt-2">
-              <dt className="font-semibold text-white">Total</dt>
-              <dd className="font-bold text-sky-300">
-                {fmtMoney(state.total_cents, state.currency)}
-              </dd>
-            </div>
-          </dl>
-        </aside>
+          </div>
+        </Panel>
       </div>
-    </main>
+    </PageShell>
   );
 }
